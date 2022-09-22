@@ -24,6 +24,7 @@
 #include "qapi/type-helpers.h"
 #include "hw/core/tcg-cpu-ops.h"
 #include "trace.h"
+#include "trace/ctrace.h"
 #include "disas/disas.h"
 #include "exec/exec-all.h"
 #include "tcg/tcg.h"
@@ -45,6 +46,7 @@
 #include "tb-hash.h"
 #include "tb-context.h"
 #include "internal.h"
+
 
 /* -icount align implementation. */
 
@@ -852,6 +854,7 @@ static inline void cpu_loop_exec_tb(CPUState *cpu, TranslationBlock *tb,
     int32_t insns_left;
 
     trace_exec_tb(tb, tb->pc);
+    ctrace_basic_block(tb->pc);
     tb = cpu_tb_exec(cpu, tb, tb_exit);
     if (*tb_exit != TB_EXIT_REQUESTED) {
         *last_tb = tb;
@@ -900,6 +903,8 @@ int cpu_exec(CPUState *cpu)
 {
     int ret;
     SyncClocks sc = { 0 };
+
+    //printf("CPU EXEC\n");
 
     /* replay_interrupt may need current_cpu */
     current_cpu = cpu;

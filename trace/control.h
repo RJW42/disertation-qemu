@@ -11,6 +11,7 @@
 #define TRACE__CONTROL_H
 
 #include "event-internal.h"
+#include "ctrace.h"
 
 typedef struct TraceEventIter {
     /* iter state */

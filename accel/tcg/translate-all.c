@@ -1433,6 +1433,9 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     tcg_ctx->tb_cflags = cflags;
  tb_overflow:
 
+    // Record mapping
+    // add_trace_mapping(pc, phys_pc);
+
 #ifdef CONFIG_PROFILER
     /* includes aborted translations because of exceptions */
     qatomic_set(&prof->tb_count1, prof->tb_count1 + 1);

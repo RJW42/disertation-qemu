@@ -17,3 +17,4 @@ GTAGS
 *.patch
 *.gcov
 .idea
+.vscode

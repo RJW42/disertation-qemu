@@ -25,6 +25,8 @@
 #include "signal-common.h"
 #include "user-mmap.h"
 
+#include <stdio.h>
+
 /***********************************************************/
 /* CPUX86 core interface */
 

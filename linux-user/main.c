@@ -690,6 +690,9 @@ int main(int argc, char **argv, char **envp)
     trace_init_file();
     qemu_plugin_load_list(&plugins, &error_fatal);
 
+    // TODO: RJW Add some toggle or something to this
+    init_trace_gen();
+
     /* Zero out regs */
     memset(regs, 0, sizeof(struct target_pt_regs));
 
@@ -915,7 +918,8 @@ int main(int argc, char **argv, char **envp)
     qemu_semihosting_guestfd_init();
 #endif
 
-    cpu_loop(env);
+
+    cpu_loop(env);    
     /* never exits */
     return 0;
 }
