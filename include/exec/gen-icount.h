@@ -4,6 +4,8 @@
 #include "exec/exec-all.h"
 #include "qemu/timer.h"
 
+#include <stdio.h>
+
 /* Helpers for instruction counting code generation.  */
 
 static TCGOp *icount_start_insn;
@@ -19,6 +21,7 @@ static inline void gen_io_start(void)
 
 static inline void gen_tb_start(const TranslationBlock *tb)
 {
+    printf("Start \n");
     TCGv_i32 count;
 
     if (tb_cflags(tb) & CF_USE_ICOUNT) {

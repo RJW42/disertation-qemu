@@ -35,6 +35,8 @@
 #include "exec/log.h"
 #include "cpregs.h"
 
+#include <stdio.h>
+
 
 #define ENABLE_ARCH_4T    arm_dc_feature(s, ARM_FEATURE_V4T)
 #define ENABLE_ARCH_5     arm_dc_feature(s, ARM_FEATURE_V5)
@@ -9895,6 +9897,7 @@ static const TranslatorOps thumb_translator_ops = {
 void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb, int max_insns,
                            target_ulong pc, void *host_pc)
 {
+    printf("Gen Block ");
     DisasContext dc = { };
     const TranslatorOps *ops = &arm_translator_ops;
     CPUARMTBFlags tb_flags = arm_tbflags_from_tb(tb);
