@@ -12,12 +12,17 @@ void init_trace_gen(void)
 
     // Open dump file
     trace_dump = fopen("trace-dump.txt", "w");
-    setbuf(trace_dump, NULL);
     
     if(trace_dump == NULL) {
          printf("Failed to open trace-dump.txt file");
          exit(1);
     }
+}
+
+void clean_trace_gen(void)
+{
+    printf("Finished\n");
+    fclose(trace_dump);
 }
 
 
