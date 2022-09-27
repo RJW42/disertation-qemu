@@ -664,6 +664,8 @@ int main(int argc, char **argv, char **envp)
     qemu_init_cpu_list();
     module_call_init(MODULE_INIT_QOM);
 
+    // setenv("QEMU_LOG", "nochain", 1);
+
     envlist = envlist_create();
 
     /* add current environment into the list */
@@ -700,7 +702,7 @@ int main(int argc, char **argv, char **envp)
     trace_init_file();
     qemu_plugin_load_list(&plugins, &error_fatal);
 
-    // TODO: RJW Add some toggle or something to this
+    // TODO: RJW inital call of trace generation
     init_trace_gen();
 
     /* Zero out regs */
@@ -755,6 +757,10 @@ int main(int argc, char **argv, char **envp)
         ac->init_machine(NULL);
     }
     cpu = cpu_create(cpu_type);
+
+    if(pt_trace_version == PT_TRACE_SOFTWARE_V1) {
+        cpu->tcg_cflags |= CF_NO_GOTO_TB; 
+    }
     env = cpu->env_ptr;
     cpu_reset(cpu);
     thread_cpu = cpu;

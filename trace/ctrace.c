@@ -8,7 +8,7 @@
 
 
 static FILE *trace_dump = NULL;
-static int pt_trace_version;
+int pt_trace_version = 0;
 
 QemuOptsList qemu_pt_trace_opts = {
     .name = "pt-trace",
@@ -22,7 +22,9 @@ QemuOptsList qemu_pt_trace_opts = {
 
 void init_trace_gen(void) 
 {
-    printf("Start\n");
+    if(pt_trace_version == 0) {
+        return;
+    }
 
     // Open dump file
     trace_dump = fopen("trace-dump.txt", "w");
@@ -35,7 +37,11 @@ void init_trace_gen(void)
 
 void clean_trace_gen(void)
 {
-    printf("Finished\n");
+    printf("Finish\n");
+    if(pt_trace_version == 0) {
+        return;
+    }
+    
     fclose(trace_dump);
 }
 
@@ -48,11 +54,16 @@ void ctrace_basic_block(long guest_pc)
 
 void pt_trace_opt_parse(const char *optarg)
 {
-
     int trace_version = optarg[0] - '0';
     if(trace_version < 0 || trace_version > 2) {
         printf("Invalid pt-trace arg\n");
         exit(1);
     }
-    pt_trace_version = trace_version;
+    pt_trace_version = trace_version + 1;
+
+    // if(pt_trace_version == PT_TRACE_SOFTWARE_V1) {
+    //     // Disable direct block chaining for version 1
+    //     printf("nochain\n");
+    //     setenv("QEMU_LOG", "nochain", 1);
+    // }
 }
