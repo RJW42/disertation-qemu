@@ -9897,7 +9897,12 @@ static const TranslatorOps thumb_translator_ops = {
 void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb, int max_insns,
                            target_ulong pc, void *host_pc)
 {
-    printf("Gen Block ");
+    // Add call to trace this basic block. TODO RJW: make this an inline function
+    TCGv_i64 tmp = tcg_temp_new_i64(); 
+    tcg_gen_movi_i64(tmp, pc);
+    gen_helper_ctrace_log_bb(cpu_env, tmp);
+    tcg_temp_free_i64(tmp); 
+
     DisasContext dc = { };
     const TranslatorOps *ops = &arm_translator_ops;
     CPUARMTBFlags tb_flags = arm_tbflags_from_tb(tb);
@@ -9913,6 +9918,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb, int max_insns,
 
     translator_loop(cpu, tb, max_insns, pc, host_pc, ops, &dc.base);
 }
+
 
 void restore_state_to_opc(CPUARMState *env, TranslationBlock *tb,
                           target_ulong *data)

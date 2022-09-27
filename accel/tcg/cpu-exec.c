@@ -854,7 +854,8 @@ static inline void cpu_loop_exec_tb(CPUState *cpu, TranslationBlock *tb,
     int32_t insns_left;
 
     trace_exec_tb(tb, tb->pc);
-    ctrace_basic_block(tb->pc);
+    // Todo: add a toggle for this
+    //ctrace_basic_block(tb->pc);
     tb = cpu_tb_exec(cpu, tb, tb_exit);
     if (*tb_exit != TB_EXIT_REQUESTED) {
         *last_tb = tb;
