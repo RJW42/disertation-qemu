@@ -8,16 +8,34 @@ import timeit
 
 
 PROGRAM_FOLDER = "./programs"
-NUMBER_OF_RUNS = 1
-QEMU_RUN_SCRIPT = "../build/qemu-aarch64 -L ~/Documents/Documents/arm-gnu-toolchain/aarch64-none-linux-gnu/libc -d nochain"
+NUMBER_OF_RUNS = 100
+QEMU_RUN_SCRIPT = "../build/qemu-aarch64 -L ~/Documents/Documents/arm-gnu-toolchain/aarch64-none-linux-gnu/libc"
+VERSIONS = [0, 1]
 
 
 def main():
     progs = compile()
-    results = benchmark(progs)
+    results = gen_data(progs)
+
+
+def save_data(results):
+    # Save generated data to file
+    pass
+
+
+def gen_data(progs):
+    # Generate all benchmark data 
+    results = {}
+
+    for version in VERSIONS:
+        result = benchmark(progs, version)
+        results[version] = result   
+    
+    return results
+
 
 def compile():
-    # Compile all benchmarks 
+    # Compile all benchmark programs 
     subprocess.run(
         "cd {} && make clean all".format(PROGRAM_FOLDER),
         shell=True, stderr=subprocess.STDOUT
@@ -41,7 +59,7 @@ def compile():
     return progs
 
 
-def benchmark(progs):
+def benchmark(progs, version):
     # Benchmark all programs
     def benchmark_prog(prog):
         # Benchmark individual program
@@ -51,24 +69,25 @@ def benchmark(progs):
             # Record execution time
             start_time = timeit.default_timer()
             subprocess.run(
-                "{} {}/{}".format(QEMU_RUN_SCRIPT, PROGRAM_FOLDER, prog), 
+                "{} -pt-trace {} {}/{}".format(
+                    QEMU_RUN_SCRIPT, version, PROGRAM_FOLDER, prog
+                ), 
                 shell=True, stderr=subprocess.STDOUT
             )
             times.append(timeit.default_timer() - start_time)
         
-        print("Finished Program: ", prog)
-        print(" Average Time: ", sum(times) / NUMBER_OF_RUNS)
+        print(" Finished Program:", prog[len("benchmark-") + 2:])
+        print("  Average Time:", sum(times) / NUMBER_OF_RUNS)
 
         return times
 
     results = {}
 
+    print("Benchmarking Version ", version)
     for prog in progs:
         results[prog] = benchmark_prog(prog)
 
     return results
-
-
 
 
 if __name__ == "__main__":

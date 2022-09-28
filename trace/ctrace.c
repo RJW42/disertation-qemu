@@ -37,7 +37,7 @@ void init_trace_gen(void)
 
 void clean_trace_gen(void)
 {
-    printf("Finish\n");
+    // printf("Finish\n");
     if(pt_trace_version == 0) {
         return;
     }
@@ -46,7 +46,7 @@ void clean_trace_gen(void)
 }
 
 
-void ctrace_basic_block(long guest_pc) 
+inline void ctrace_basic_block(long guest_pc) 
 {
     fprintf(trace_dump, "%lu\n", guest_pc);
 }
