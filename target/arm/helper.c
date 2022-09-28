@@ -11271,3 +11271,7 @@ void aarch64_sve_change_el(CPUARMState *env, int old_el,
     }
 }
 #endif
+
+void HELPER(ctrace_log_bb)(CPUARMState *env, long unsigned pc) {
+    ctrace_basic_block(pc);
+}

@@ -24,6 +24,7 @@
 #include "qapi/type-helpers.h"
 #include "hw/core/tcg-cpu-ops.h"
 #include "trace.h"
+#include "trace/ctrace.h"
 #include "disas/disas.h"
 #include "exec/exec-all.h"
 #include "tcg/tcg.h"
@@ -45,6 +46,7 @@
 #include "tb-hash.h"
 #include "tb-context.h"
 #include "internal.h"
+
 
 /* -icount align implementation. */
 
@@ -372,6 +374,14 @@ static bool check_for_breakpoints(CPUState *cpu, target_ulong pc,
     return false;
 }
 
+static inline void pt_trace_exec_tb(TranslationBlock *tb)
+{
+    if(pt_trace_version != PT_TRACE_SOFTWARE_V1) {
+        return;
+    }
+    ctrace_basic_block(tb->pc);
+}
+
 /**
  * helper_lookup_tb_ptr: quick check for next tb
  * @env: current cpu state
@@ -400,6 +410,7 @@ const void *HELPER(lookup_tb_ptr)(CPUArchState *env)
     }
 
     log_cpu_exec(pc, cpu, tb);
+    pt_trace_exec_tb(tb);
 
     return tb->tc.ptr;
 }
@@ -423,6 +434,7 @@ cpu_tb_exec(CPUState *cpu, TranslationBlock *itb, int *tb_exit)
     const void *tb_ptr = itb->tc.ptr;
 
     log_cpu_exec(itb->pc, cpu, itb);
+    pt_trace_exec_tb(itb);
 
     qemu_thread_jit_execute();
     ret = tcg_qemu_tb_exec(env, tb_ptr);
@@ -846,12 +858,14 @@ static inline bool cpu_handle_interrupt(CPUState *cpu,
     return false;
 }
 
+
 static inline void cpu_loop_exec_tb(CPUState *cpu, TranslationBlock *tb,
                                     TranslationBlock **last_tb, int *tb_exit)
 {
     int32_t insns_left;
 
     trace_exec_tb(tb, tb->pc);
+    
     tb = cpu_tb_exec(cpu, tb, tb_exit);
     if (*tb_exit != TB_EXIT_REQUESTED) {
         *last_tb = tb;

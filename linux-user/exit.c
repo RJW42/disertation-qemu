@@ -24,6 +24,8 @@
 #include <sys/gmon.h>
 #endif
 
+#include "trace/control.h"
+
 #ifdef CONFIG_GCOV
 extern void __gcov_dump(void);
 #endif
@@ -38,4 +40,5 @@ void preexit_cleanup(CPUArchState *env, int code)
 #endif
         gdb_exit(code);
         qemu_plugin_user_exit();
+        clean_trace_gen();
 }

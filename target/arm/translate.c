@@ -34,6 +34,9 @@
 #include "exec/helper-gen.h"
 #include "exec/log.h"
 #include "cpregs.h"
+#include "trace/ctrace.h"
+
+#include <stdio.h>
 
 
 #define ENABLE_ARCH_4T    arm_dc_feature(s, ARM_FEATURE_V4T)
@@ -9891,10 +9894,24 @@ static const TranslatorOps thumb_translator_ops = {
     .disas_log          = arm_tr_disas_log,
 };
 
+static inline void add_pt_trace_helper(CPUState *cpu, TranslationBlock *tb, target_ulong pc) 
+{
+    if(pt_trace_version != PT_TRACE_SOFTWARE_V2) {
+        return;
+    }
+
+    TCGv_i64 tmp = tcg_temp_new_i64(); 
+    tcg_gen_movi_i64(tmp, pc);
+    gen_helper_ctrace_log_bb(cpu_env, tmp);
+    tcg_temp_free_i64(tmp); 
+}
+
 /* generate intermediate code for basic block 'tb'.  */
 void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb, int max_insns,
                            target_ulong pc, void *host_pc)
 {
+    add_pt_trace_helper(cpu, tb, pc);    
+
     DisasContext dc = { };
     const TranslatorOps *ops = &arm_translator_ops;
     CPUARMTBFlags tb_flags = arm_tbflags_from_tb(tb);
@@ -9910,6 +9927,7 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb, int max_insns,
 
     translator_loop(cpu, tb, max_insns, pc, host_pc, ops, &dc.base);
 }
+
 
 void restore_state_to_opc(CPUARMState *env, TranslationBlock *tb,
                           target_ulong *data)

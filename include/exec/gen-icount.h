@@ -4,6 +4,8 @@
 #include "exec/exec-all.h"
 #include "qemu/timer.h"
 
+#include <stdio.h>
+
 /* Helpers for instruction counting code generation.  */
 
 static TCGOp *icount_start_insn;

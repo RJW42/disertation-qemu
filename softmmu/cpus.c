@@ -22,6 +22,8 @@
  * THE SOFTWARE.
  */
 
+#include <stdio.h>
+
 #include "qemu/osdep.h"
 #include "monitor/monitor.h"
 #include "qemu/coroutine-tls.h"
