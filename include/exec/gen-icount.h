@@ -21,7 +21,6 @@ static inline void gen_io_start(void)
 
 static inline void gen_tb_start(const TranslationBlock *tb)
 {
-    printf("Start \n");
     TCGv_i32 count;
 
     if (tb_cflags(tb) & CF_USE_ICOUNT) {

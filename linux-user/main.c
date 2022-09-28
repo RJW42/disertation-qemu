@@ -54,6 +54,8 @@
 #include "loader.h"
 #include "user-mmap.h"
 
+#include <stdio.h>
+
 #ifdef CONFIG_SEMIHOSTING
 #include "semihosting/semihost.h"
 #endif
@@ -410,6 +412,11 @@ static void handle_arg_trace(const char *arg)
     trace_opt_parse(arg);
 }
 
+static void handle_arg_pttrace(const char *arg)
+{
+    pt_trace_opt_parse(arg);   
+}
+
 #if defined(TARGET_XTENSA)
 static void handle_arg_abi_call0(const char *arg)
 {
@@ -477,6 +484,8 @@ static const struct qemu_argument arg_table[] = {
      "",           "Seed for pseudo-random number generator"},
     {"trace",      "QEMU_TRACE",       true,  handle_arg_trace,
      "",           "[[enable=]<pattern>][,events=<file>][,file=<file>]"},
+    {"pt-trace",      "QEMU_PTTRACE",       true,  handle_arg_pttrace,
+     "",           "set the pt-trace version to use"},
 #ifdef CONFIG_PLUGIN
     {"plugin",     "QEMU_PLUGIN",      true,  handle_arg_plugin,
      "",           "[file=]<file>[,<argname>=<argvalue>]"},
@@ -655,6 +664,8 @@ int main(int argc, char **argv, char **envp)
     qemu_init_cpu_list();
     module_call_init(MODULE_INIT_QOM);
 
+    // setenv("QEMU_LOG", "nochain", 1);
+
     envlist = envlist_create();
 
     /* add current environment into the list */
@@ -676,6 +687,7 @@ int main(int argc, char **argv, char **envp)
     cpu_model = NULL;
 
     qemu_add_opts(&qemu_trace_opts);
+    qemu_add_opts(&qemu_pt_trace_opts);
     qemu_plugin_add_opts();
 
     optind = parse_args(argc, argv);
@@ -690,7 +702,7 @@ int main(int argc, char **argv, char **envp)
     trace_init_file();
     qemu_plugin_load_list(&plugins, &error_fatal);
 
-    // TODO: RJW Add some toggle or something to this
+    // TODO: RJW inital call of trace generation
     init_trace_gen();
 
     /* Zero out regs */
@@ -745,6 +757,10 @@ int main(int argc, char **argv, char **envp)
         ac->init_machine(NULL);
     }
     cpu = cpu_create(cpu_type);
+
+    if(pt_trace_version == PT_TRACE_SOFTWARE_V1) {
+        cpu->tcg_cflags |= CF_NO_GOTO_TB; 
+    }
     env = cpu->env_ptr;
     cpu_reset(cpu);
     thread_cpu = cpu;

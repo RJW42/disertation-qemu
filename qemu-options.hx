@@ -4737,6 +4737,20 @@ SRST
   .. include:: ../qemu-option-trace.rst.inc
 
 ERST
+
+DEF("pt-trace", HAS_ARG, QEMU_OPTION_pttrace,
+    "-pt-trace number   set the pt-trace version\n"
+    "          0 - software v1n"
+    "          1 - software v2n"
+    "          2 - hardware v1\n",
+    QEMU_ARCH_ALL)
+SRST
+``-pt-trace number``
+    Set the pt-trace version to be used. 
+
+    Supported versions 0, 1, 2.
+ERST
+
 DEF("plugin", HAS_ARG, QEMU_OPTION_plugin,
     "-plugin [file=]<file>[,<argname>=<argvalue>]\n"
     "                load a plugin\n",
