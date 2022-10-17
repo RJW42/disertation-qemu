@@ -758,7 +758,7 @@ int main(int argc, char **argv, char **envp)
     }
     cpu = cpu_create(cpu_type);
 
-    if(pt_trace_version == PT_TRACE_SOFTWARE_V1) {
+    if(pt_trace_version == PT_TRACE_SOFTWARE_V1 || pt_trace_version == PT_TRACE_HARDWARE_V1) {
         cpu->tcg_cflags |= CF_NO_GOTO_TB; 
     }
     env = cpu->env_ptr;

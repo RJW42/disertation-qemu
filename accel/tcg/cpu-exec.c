@@ -492,6 +492,10 @@ static void cpu_exec_enter(CPUState *cpu)
     if (cc->tcg_ops->cpu_exec_enter) {
         cc->tcg_ops->cpu_exec_enter(cpu);
     }
+
+    if(pt_trace_version == PT_TRACE_HARDWARE_V1) {
+        ipt_trace_enter();
+    }
 }
 
 static void cpu_exec_exit(CPUState *cpu)
@@ -500,6 +504,10 @@ static void cpu_exec_exit(CPUState *cpu)
 
     if (cc->tcg_ops->cpu_exec_exit) {
         cc->tcg_ops->cpu_exec_exit(cpu);
+    }
+
+    if(pt_trace_version == PT_TRACE_HARDWARE_V1) {
+        ipt_trace_exit();
     }
 }
 
