@@ -9,7 +9,7 @@ import timeit
 
 PROGRAM_FOLDER = "./programs"
 NUMBER_OF_RUNS = 100
-QEMU_RUN_SCRIPT = "../build/qemu-aarch64 -L ~/Documents/Documents/arm-gnu-toolchain/aarch64-none-linux-gnu/libc"
+QEMU_RUN_SCRIPT = "../build/qemu-aarch64 -L ~/Documents/arm-gnu-toolchain/aarch64-none-linux-gnu/libc"
 VERSIONS = [0, 1]
 
 
