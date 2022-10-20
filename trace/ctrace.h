@@ -18,6 +18,9 @@ extern QemuOptsList qemu_pt_trace_opts;
 void init_trace_gen(void);
 void clean_trace_gen(void);
 void ctrace_basic_block(long guest_pc);
+void ctrace_record_mapping(long guest_pc, long host_pc);
 void pt_trace_opt_parse(const char *arg);
+void ipt_trace_enter(void);
+void ipt_trace_exit(void);
 
 #endif
