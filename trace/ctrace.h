@@ -4,11 +4,18 @@
 #define PT_TRACE_SOFTWARE_V1 1
 #define PT_TRACE_SOFTWARE_V2 2
 #define PT_TRACE_HARDWARE_V1 3
+#define PT_TRACE_HARDWARE_V2 4
 
 /* 
  * Version of pt_trace set 
  */
 extern int pt_trace_version;
+
+/*
+ * Used for logging asm
+ * Didn't use functions as the imports are too messy
+ */
+extern FILE* pt_asm_log_file;
 
 /**
  * Definition of QEMU options describing the pt trace 
@@ -22,5 +29,6 @@ void ctrace_record_mapping(long guest_pc, long host_pc);
 void pt_trace_opt_parse(const char *arg);
 void ipt_trace_enter(void);
 void ipt_trace_exit(void);
+void record_asm_block(TranslationBlock *tb);
 
 #endif

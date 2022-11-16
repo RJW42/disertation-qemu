@@ -24,6 +24,7 @@
 
 #include "../tcg-ldst.c.inc"
 #include "../tcg-pool.c.inc"
+#include "trace/ctrace.h"
 
 #ifdef CONFIG_DEBUG_TCG
 static const char * const tcg_target_reg_names[TCG_TARGET_NB_REGS] = {
@@ -1349,6 +1350,7 @@ static void tcg_out_addi(TCGContext *s, int reg, tcg_target_long val)
 static void tcg_out_jxx(TCGContext *s, int opc, TCGLabel *l, int small)
 {
     int32_t val, val1;
+    tcg_insn_unit *intel_pt_ptr = s->code_ptr;
 
     if (l->has_value) {
         val = tcg_pcrel_diff(s, l->u.value_ptr);
@@ -1389,6 +1391,11 @@ static void tcg_out_jxx(TCGContext *s, int opc, TCGLabel *l, int small)
         tcg_out_reloc(s, s->code_ptr, R_386_PC32, l, -4);
         s->code_ptr += 4;
     }
+
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2) {
+        // todo: rjw24
+        fprintf(pt_asm_log_file, "JXX: 0x%lX %u\n", (unsigned long)(intel_pt_ptr), l->id);
+    }
 }
 
 static void tcg_out_cmp(TCGContext *s, TCGArg arg1, TCGArg arg2,
@@ -1410,6 +1417,8 @@ static void tcg_out_brcond32(TCGContext *s, TCGCond cond,
                              TCGArg arg1, TCGArg arg2, int const_arg2,
                              TCGLabel *label, int small)
 {
+    // todo: rjw24 remove
+    // printf("BR32: ");
     tcg_out_cmp(s, arg1, arg2, const_arg2, 0);
     tcg_out_jxx(s, tcg_cond_to_jcc[cond], label, small);
 }
@@ -1419,6 +1428,8 @@ static void tcg_out_brcond64(TCGContext *s, TCGCond cond,
                              TCGArg arg1, TCGArg arg2, int const_arg2,
                              TCGLabel *label, int small)
 {
+    // todo: rjw24 remove
+    // printf("BR64: ");
     tcg_out_cmp(s, arg1, arg2, const_arg2, P_REXW);
     tcg_out_jxx(s, tcg_cond_to_jcc[cond], label, small);
 }
@@ -1430,6 +1441,8 @@ static void tcg_out_brcond2(TCGContext *s, const TCGArg *args,
 {
     TCGLabel *label_next = gen_new_label();
     TCGLabel *label_this = arg_label(args[5]);
+    // todo: rjw24 remove
+    // printf("BR2 : ")
 
     switch(args[4]) {
     case TCG_COND_EQ:
@@ -1668,7 +1681,14 @@ static inline void tcg_out_call(TCGContext *s, const tcg_insn_unit *dest)
 
 static void tcg_out_jmp(TCGContext *s, const tcg_insn_unit *dest)
 {
+    tcg_insn_unit *intel_pt_ptr = s->code_ptr;
+
     tcg_out_branch(s, 0, dest);
+
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2) { 
+        // Todo: rjw24
+        fprintf(pt_asm_log_file, "JMP1: 0x%lX 0x%lX\n", (unsigned long)intel_pt_ptr, (unsigned long)dest);
+    }
 }
 
 static void tcg_out_nopn(TCGContext *s, int n)
@@ -2033,6 +2053,11 @@ static bool tcg_out_fail_alignment(TCGContext *s, TCGLabelQemuLdst *l)
     /* resolve label address */
     tcg_patch32(l->label_ptr[0], s->code_ptr - l->label_ptr[0] - 4);
 
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2) {
+        // todo: rjw24
+        fprintf(pt_asm_log_file, "JXX_LDST: 0x%lX 0x%lX\n", (unsigned long)l->label_ptr[0] - 2, (unsigned long)(s->code_ptr));
+    }
+
     if (TCG_TARGET_REG_BITS == 32) {
         int ofs = 0;
 
@@ -2380,6 +2405,8 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
         }
         break;
     case INDEX_op_goto_tb:
+        tcg_insn_unit *intel_pt_ptr = s->code_ptr;
+
         if (s->tb_jmp_insn_offset) {
             /* direct jump method */
             int gap;
@@ -2389,14 +2416,36 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
             gap = QEMU_ALIGN_PTR_UP(s->code_ptr + 1, 4) - s->code_ptr;
             if (gap != 1) {
                 tcg_out_nopn(s, gap - 1);
+
+                /* Update intelpt pointer incase of nops */ 
+                intel_pt_ptr = s->code_ptr;
             }
+
+            
+
             tcg_out8(s, OPC_JMP_long); /* jmp im */
             s->tb_jmp_insn_offset[a0] = tcg_current_code_size(s);
             tcg_out32(s, 0);
+
+            if(pt_trace_version == PT_TRACE_HARDWARE_V2) { 
+                // Todo: rjw24
+                fprintf(pt_asm_log_file, 
+                        "JMP2: 0x%lX 0x%lX\n", 
+                        (unsigned long)intel_pt_ptr, (unsigned long)(s->code_buf + s->tb_jmp_insn_offset[a0] + 4)
+                );
+            }
         } else {
             /* indirect jump method */
             tcg_out_modrm_offset(s, OPC_GRP5, EXT5_JMPN_Ev, -1,
                                  (intptr_t)(s->tb_jmp_target_addr + a0));
+            
+            if(pt_trace_version == PT_TRACE_HARDWARE_V2) { 
+                // Todo: rjw24
+                fprintf(pt_asm_log_file, 
+                        "JMP3: 0x%lX 0x%lX\n", 
+                        (unsigned long)intel_pt_ptr, (unsigned long)(s->tb_jmp_target_addr + a0)
+                );
+            }
         }
         set_jmp_reset_offset(s, a0);
         break;
@@ -2405,6 +2454,8 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
         tcg_out_modrm(s, OPC_GRP5, EXT5_JMPN_Ev, a0);
         break;
     case INDEX_op_br:
+        // todo: rjw24 remove
+        // printf("BR: ");
         tcg_out_jxx(s, JCC_JMP, arg_label(a0), 0);
         break;
     OP_32_64(ld8u):

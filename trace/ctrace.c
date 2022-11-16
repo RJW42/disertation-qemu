@@ -13,6 +13,7 @@
 #include <errno.h>
 
 #include "qemu/osdep.h"
+#include "qemu/typedefs.h"
 #include "qemu/help_option.h"
 #include "qemu/option.h"
 #include "ctrace.h"
@@ -52,6 +53,7 @@ static pthread_t trace_thread/*, rate_thread, coll_thread*/;
 static struct perf_event_mmap_page *header;
 static void *base_area, *data_area, *aux_area;
 
+static volatile int stop_thread = 0;
 static volatile u64 __PT_DATA_COLLECTED;
 static u64 __LAST_HEAD;
 //static u64 __LAST_COLLECT;
@@ -59,7 +61,7 @@ static u64 __LAST_HEAD;
 
 /* Qemu Globals */
 int pt_trace_version = 0;
-
+FILE* pt_asm_log_file = NULL;
 
 QemuOptsList qemu_pt_trace_opts = {
     .name = "pt-trace",
@@ -79,7 +81,7 @@ void init_trace_gen(void)
     }
 
     // Open dump file
-    if(pt_trace_version == PT_TRACE_HARDWARE_V1) {
+    if(pt_trace_version == PT_TRACE_HARDWARE_V1 || pt_trace_version == PT_TRACE_HARDWARE_V2) {
         trace_dump = fopen("trace-dump.pt", "wb");
     } else {
         trace_dump = fopen("trace-dump.txt", "w");
@@ -92,9 +94,18 @@ void init_trace_gen(void)
 
 
     // Perform version spesicic initilisation 
-    if(pt_trace_version == PT_TRACE_HARDWARE_V1) {
+    if(pt_trace_version == PT_TRACE_HARDWARE_V1 || pt_trace_version == PT_TRACE_HARDWARE_V2) {
         init_ipt();
         init_ipt_mapping();
+    }
+
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2) {
+        pt_asm_log_file = fopen("asm-trace.txt", "w");
+
+        if(pt_asm_log_file == NULL) {
+            printf("Failed to open trace-dump file");
+            exit(1);
+        }
     }
 }
 
@@ -107,20 +118,28 @@ void clean_trace_gen(void)
     
     fclose(trace_dump);
     
-    if(pt_trace_version == PT_TRACE_HARDWARE_V1) {
+    if(pt_trace_version == PT_TRACE_HARDWARE_V1 || pt_trace_version == PT_TRACE_HARDWARE_V2) {
         fclose(mapping_data);
+
+        stop_thread = 1;
+
+        pthread_join(trace_thread, NULL);
+    }
+
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2) {
+        fclose(pt_asm_log_file);
     }
 }
 
 
 inline void ctrace_basic_block(long guest_pc) 
 {
-    fprintf(trace_dump, "%lu\n", guest_pc);
+    fprintf(trace_dump, "%lX\n", guest_pc);
 }
 
 inline void ctrace_record_mapping(long guest_pc, long host_pc) 
 {
-    fprintf(mapping_data, "%lu, %lu\n", guest_pc, host_pc);
+    fprintf(mapping_data, "%lX, %lX\n", guest_pc, host_pc);
 }
 
 
@@ -130,7 +149,7 @@ static void *trace_thread_proc(void *arg)
     const unsigned char *buffer = (const unsigned char *)aux_area;
     u64 size = header->aux_size;
 
-    while(1) {
+    while(!stop_thread) {
         u64 head = READ_ONCE(header->aux_head);
         rmb();
 
@@ -155,7 +174,7 @@ static void *trace_thread_proc(void *arg)
             __PT_DATA_COLLECTED += wrapped_head;
         }
 
-        size_t SIZE = 0, OFFSET = 0;
+        size_t SIZE = 0;
         if (wrapped_head > wrapped_tail) {
             SIZE = wrapped_head - wrapped_tail;
         } else {
@@ -163,7 +182,7 @@ static void *trace_thread_proc(void *arg)
             SIZE += wrapped_head;
         }
 
-        fprintf(stderr, "OFFSET=%lu, WRO=%lu, SIZE=%lu\n", OFFSET, WRAPPED_OFFSET, SIZE);
+        // fprintf(stderr, "OFFSET=%lu, WRO=%lu, SIZE=%lu\n", OFFSET, WRAPPED_OFFSET, SIZE);
 
         __LAST_HEAD = head;
         __PT_DATA_COLLECTED += SIZE;
@@ -205,7 +224,8 @@ static void init_ipt(void)
     pea.exclude_hv = 1;
     pea.precise_ip = 3;
 
-    pea.config = 0x2001;
+    // 2401 to disable return compression
+    pea.config = 0x2401; //0010001000000001
 
     // Open the event.
     perf_fd = syscall(SYS_perf_event_open, &pea, 0, -1, -1, 0);
@@ -217,7 +237,7 @@ static void init_ipt(void)
         exit(EXIT_FAILURE);
     }
 
-    fprintf(stderr, "intel-pt: tracing active\n");
+    // fprintf(stderr, "intel-pt: tracing active\n");
 
     // Map perf structures into memory
     base_area = mmap(NULL, (NR_DATA_PAGES + 1) * 4096, PROT_READ | PROT_WRITE, MAP_SHARED, perf_fd, 0);
@@ -249,7 +269,7 @@ static void init_ipt(void)
         exit(EXIT_FAILURE);
     }
 
-    fprintf(stderr, "intel-pt: base=%p, data=%p, aux=%p\n", base_area, data_area, aux_area);
+    // fprintf(stderr, "intel-pt: base=%p, data=%p, aux=%p\n", base_area, data_area, aux_area);
 
     pthread_create(&trace_thread, NULL, trace_thread_proc, NULL);
 }
@@ -279,15 +299,81 @@ static int get_intel_pt_perf_type(void)
 }
 
 
-void ipt_trace_enter(void)
+inline void ipt_trace_enter(void)
 {
-    ioctl(perf_fd, PERF_EVENT_IOC_ENABLE);
+    // Todo: Signal to the asm out that a new mode packet is about to be sent out
+    //       this is used to determine which asm relates to what blocks
+    if(pt_trace_version == PT_TRACE_HARDWARE_V1 || pt_trace_version == PT_TRACE_HARDWARE_V2) {
+        ioctl(perf_fd, PERF_EVENT_IOC_ENABLE);
+
+        if(pt_trace_version == PT_TRACE_HARDWARE_V2) {
+            fprintf(pt_asm_log_file, "IPT_START:\n");
+        }
+    }
 }
 
 
-void ipt_trace_exit(void)
+inline void ipt_trace_exit(void)
 {
-    ioctl(perf_fd, PERF_EVENT_IOC_DISABLE);
+    if(pt_trace_version == PT_TRACE_HARDWARE_V1 || pt_trace_version == PT_TRACE_HARDWARE_V2) {
+        ioctl(perf_fd, PERF_EVENT_IOC_DISABLE);
+
+        if(pt_trace_version == PT_TRACE_HARDWARE_V2) {
+            fprintf(pt_asm_log_file, "IPT_STOP:\n");
+        }
+    }
+}
+
+/* ***** Asm Recording ***** */
+inline void record_asm_block(TranslationBlock *tb)
+{
+    // printf("\n");
+    // FILE* logfile = stdout;
+    // int gen_code_size = tb->tc.size;
+    // int code_size;
+    // const tcg_target_ulong *rx_data_gen_ptr;
+    // size_t chunk_start;
+    // int insn = 0;
+
+    // if (tcg_ctx->data_gen_ptr) {
+    //     rx_data_gen_ptr = tcg_splitwx_to_rx(tcg_ctx->data_gen_ptr);
+    //     code_size = (const void *)rx_data_gen_ptr - tb->tc.ptr;
+    // } else {
+    //     rx_data_gen_ptr = 0;
+    //     code_size = gen_code_size;
+    // }
+
+    // /* Dump header and the first instruction */
+    // fprintf(logfile, "OUT: [size=%d]\n", gen_code_size);
+    // fprintf(logfile,
+    //         "  -- guest addr 0x" TARGET_FMT_lx " + tb prologue\n",
+    //         tcg_ctx->gen_insn_data[insn][0]);
+    // chunk_start = tcg_ctx->gen_insn_end_off[insn];
+    // disas(logfile, tb->tc.ptr, chunk_start);
+
+    // /*
+    //     * Dump each instruction chunk, wrapping up empty chunks into
+    //     * the next instruction. The whole array is offset so the
+    //     * first entry is the beginning of the 2nd instruction.
+    //     */
+    // while (insn < tb->icount) {
+    //     size_t chunk_end = tcg_ctx->gen_insn_end_off[insn];
+    //     if (chunk_end > chunk_start) {
+    //         fprintf(logfile, "  -- guest addr 0x" TARGET_FMT_lx "\n",
+    //                 tcg_ctx->gen_insn_data[insn][0]);
+    //         disas(logfile, tb->tc.ptr + chunk_start,
+    //                 chunk_end - chunk_start);
+    //         chunk_start = chunk_end;
+    //     }
+    //     insn++;
+    // }
+
+    // if (chunk_start < code_size) {
+    //     fprintf(logfile, "  -- tb slow paths + alignment\n");
+    //     disas(logfile, tb->tc.ptr + chunk_start,
+    //             code_size - chunk_start);
+    // }
+    // printf("\n");
 }
 
 
@@ -295,7 +381,7 @@ void ipt_trace_exit(void)
 void pt_trace_opt_parse(const char *optarg)
 {
     int trace_version = optarg[0] - '0';
-    if(trace_version < 0 || trace_version > 2) {
+    if(trace_version < 0 || trace_version > 3) {
         printf("Invalid pt-trace arg\n");
         exit(1);
     }

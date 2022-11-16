@@ -382,6 +382,57 @@ static inline void pt_trace_exec_tb(TranslationBlock *tb)
     ctrace_basic_block(tb->pc);
 }
 
+static inline void record_asm_block_2(TranslationBlock *tb)
+{
+    FILE* logfile = stderr;
+    int gen_code_size = tb->tc.size;
+    int code_size;
+    const tcg_target_ulong *rx_data_gen_ptr;
+    size_t chunk_start;
+    int insn = 0;
+
+    if (tcg_ctx->data_gen_ptr) {
+        rx_data_gen_ptr = tcg_splitwx_to_rx(tcg_ctx->data_gen_ptr);
+        code_size = (const void *)rx_data_gen_ptr - tb->tc.ptr;
+    } else {
+        rx_data_gen_ptr = 0;
+        code_size = gen_code_size;
+    }
+
+    /* Dump header and the first instruction */
+    fprintf(logfile, "OUT: [size=%d]\n", gen_code_size);
+    fprintf(logfile,
+            "  -- guest addr 0x" TARGET_FMT_lx " + tb prologue\n",
+            tcg_ctx->gen_insn_data[insn][0]);
+    chunk_start = tcg_ctx->gen_insn_end_off[insn];
+    disas(logfile, tb->tc.ptr, chunk_start);
+
+    /*
+        * Dump each instruction chunk, wrapping up empty chunks into
+        * the next instruction. The whole array is offset so the
+        * first entry is the beginning of the 2nd instruction.
+        */
+    while (insn < tb->icount) {
+        size_t chunk_end = tcg_ctx->gen_insn_end_off[insn];
+        if (chunk_end > chunk_start) {
+            fprintf(logfile, "  -- guest addr 0x" TARGET_FMT_lx "\n",
+                    tcg_ctx->gen_insn_data[insn][0]);
+            disas(logfile, tb->tc.ptr + chunk_start,
+                    chunk_end - chunk_start);
+            chunk_start = chunk_end;
+        }
+        insn++;
+    }
+
+    if (chunk_start < code_size) {
+        fprintf(logfile, "  -- tb slow paths + alignment\n");
+        disas(logfile, tb->tc.ptr + chunk_start,
+                code_size - chunk_start);
+    }
+
+    fprintf(logfile, "\n");
+}
+
 /**
  * helper_lookup_tb_ptr: quick check for next tb
  * @env: current cpu state
@@ -435,9 +486,20 @@ cpu_tb_exec(CPUState *cpu, TranslationBlock *itb, int *tb_exit)
 
     log_cpu_exec(itb->pc, cpu, itb);
     pt_trace_exec_tb(itb);
+    
 
     qemu_thread_jit_execute();
+
+    // ********* rjw remove this ********* //   
+    // {
+    //     record_asm_block_2(itb);
+    // }
+    // ********* rjw remove this ********* //
+
+    ipt_trace_enter();
     ret = tcg_qemu_tb_exec(env, tb_ptr);
+    ipt_trace_exit();
+
     cpu->can_do_io = 1;
     /*
      * TODO: Delay swapping back to the read-write region of the TB
@@ -493,9 +555,9 @@ static void cpu_exec_enter(CPUState *cpu)
         cc->tcg_ops->cpu_exec_enter(cpu);
     }
 
-    if(pt_trace_version == PT_TRACE_HARDWARE_V1) {
-        ipt_trace_enter();
-    }
+    // if(pt_trace_version == PT_TRACE_HARDWARE_V1 || pt_trace_version == PT_TRACE_HARDWARE_V2) {
+    //     ipt_trace_enter(); // Todo rjw24 remove this 
+    // }
 }
 
 static void cpu_exec_exit(CPUState *cpu)
@@ -506,9 +568,9 @@ static void cpu_exec_exit(CPUState *cpu)
         cc->tcg_ops->cpu_exec_exit(cpu);
     }
 
-    if(pt_trace_version == PT_TRACE_HARDWARE_V1) {
-        ipt_trace_exit();
-    }
+    // if(pt_trace_version == PT_TRACE_HARDWARE_V1 || pt_trace_version == PT_TRACE_HARDWARE_V2) {
+    //     ipt_trace_exit(); // Todo rjw24 remove this 
+    // }
 }
 
 void cpu_exec_step_atomic(CPUState *cpu)
@@ -583,6 +645,9 @@ void tb_set_jmp_target(TranslationBlock *tb, int n, uintptr_t addr)
         uintptr_t jmp_rx = tc_ptr + offset;
         uintptr_t jmp_rw = jmp_rx - tcg_splitwx_diff;
         tb_target_set_jmp_target(tc_ptr, jmp_rx, jmp_rw, addr);
+        // Todo: rjw24 play around with this seems to be working
+        //       maybe wanna move into intel spesfic section
+        // disas(stdout, (void*)jmp_rx - 1, 5);
     } else {
         tb->jmp_target_arg[n] = addr;
     }
@@ -614,6 +679,9 @@ static inline void tb_add_jump(TranslationBlock *tb, int n,
     /* add in TB jmp list */
     tb->jmp_list_next[n] = tb_next->jmp_list_head;
     tb_next->jmp_list_head = (uintptr_t)tb | n;
+
+    // todo: rjw24
+    record_asm_block_2(tb);
 
     qemu_spin_unlock(&tb_next->jmp_lock);
 
