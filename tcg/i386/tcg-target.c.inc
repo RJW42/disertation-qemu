@@ -1392,7 +1392,8 @@ static void tcg_out_jxx(TCGContext *s, int opc, TCGLabel *l, int small)
         s->code_ptr += 4;
     }
 
-    if(pt_trace_version == PT_TRACE_HARDWARE_V2) {
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V3) {
         // todo: rjw24
         fprintf(pt_asm_log_file, "JXX: 0x%lX %u\n", (unsigned long)(intel_pt_ptr), l->id);
     }
@@ -1417,8 +1418,6 @@ static void tcg_out_brcond32(TCGContext *s, TCGCond cond,
                              TCGArg arg1, TCGArg arg2, int const_arg2,
                              TCGLabel *label, int small)
 {
-    // todo: rjw24 remove
-    // printf("BR32: ");
     tcg_out_cmp(s, arg1, arg2, const_arg2, 0);
     tcg_out_jxx(s, tcg_cond_to_jcc[cond], label, small);
 }
@@ -1428,8 +1427,6 @@ static void tcg_out_brcond64(TCGContext *s, TCGCond cond,
                              TCGArg arg1, TCGArg arg2, int const_arg2,
                              TCGLabel *label, int small)
 {
-    // todo: rjw24 remove
-    // printf("BR64: ");
     tcg_out_cmp(s, arg1, arg2, const_arg2, P_REXW);
     tcg_out_jxx(s, tcg_cond_to_jcc[cond], label, small);
 }
@@ -1441,8 +1438,6 @@ static void tcg_out_brcond2(TCGContext *s, const TCGArg *args,
 {
     TCGLabel *label_next = gen_new_label();
     TCGLabel *label_this = arg_label(args[5]);
-    // todo: rjw24 remove
-    // printf("BR2 : ")
 
     switch(args[4]) {
     case TCG_COND_EQ:
@@ -1685,7 +1680,8 @@ static void tcg_out_jmp(TCGContext *s, const tcg_insn_unit *dest)
 
     tcg_out_branch(s, 0, dest);
 
-    if(pt_trace_version == PT_TRACE_HARDWARE_V2) { 
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V3) { 
         // Todo: rjw24
         fprintf(pt_asm_log_file, "JMP1: 0x%lX 0x%lX\n", (unsigned long)intel_pt_ptr, (unsigned long)dest);
     }
@@ -2053,7 +2049,8 @@ static bool tcg_out_fail_alignment(TCGContext *s, TCGLabelQemuLdst *l)
     /* resolve label address */
     tcg_patch32(l->label_ptr[0], s->code_ptr - l->label_ptr[0] - 4);
 
-    if(pt_trace_version == PT_TRACE_HARDWARE_V2) {
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V3) {
         // todo: rjw24
         fprintf(pt_asm_log_file, "JXX_LDST: 0x%lX 0x%lX\n", (unsigned long)l->label_ptr[0] - 2, (unsigned long)(s->code_ptr));
     }
@@ -2427,7 +2424,8 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
             s->tb_jmp_insn_offset[a0] = tcg_current_code_size(s);
             tcg_out32(s, 0);
 
-            if(pt_trace_version == PT_TRACE_HARDWARE_V2) { 
+            if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+               pt_trace_version == PT_TRACE_HARDWARE_V3) { 
                 // Todo: rjw24
                 fprintf(pt_asm_log_file, 
                         "JMP2: 0x%lX 0x%lX\n", 
@@ -2439,7 +2437,8 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
             tcg_out_modrm_offset(s, OPC_GRP5, EXT5_JMPN_Ev, -1,
                                  (intptr_t)(s->tb_jmp_target_addr + a0));
             
-            if(pt_trace_version == PT_TRACE_HARDWARE_V2) { 
+            if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+               pt_trace_version == PT_TRACE_HARDWARE_V3) { 
                 // Todo: rjw24
                 fprintf(pt_asm_log_file, 
                         "JMP3: 0x%lX 0x%lX\n", 
@@ -2454,8 +2453,6 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
         tcg_out_modrm(s, OPC_GRP5, EXT5_JMPN_Ev, a0);
         break;
     case INDEX_op_br:
-        // todo: rjw24 remove
-        // printf("BR: ");
         tcg_out_jxx(s, JCC_JMP, arg_label(a0), 0);
         break;
     OP_32_64(ld8u):

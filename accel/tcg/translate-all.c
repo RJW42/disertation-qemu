@@ -1433,7 +1433,8 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     tcg_ctx->tb_cflags = cflags;
  tb_overflow:
 
-    if(pt_trace_version == PT_TRACE_HARDWARE_V2) {
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V3) {
         // Todo: rjw24
         fprintf(pt_asm_log_file, "BLOCK: 0x%lX\n", (unsigned long)tb->tc.ptr);
     }
@@ -1525,7 +1526,8 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     }
     tb->tc.size = gen_code_size;
 
-    if(pt_trace_version == PT_TRACE_HARDWARE_V2) {
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V3) {
         // Todo: rjw24
         fprintf(pt_asm_log_file, "BLOCK_SIZE: %lu\n", tb->tc.size);
     }

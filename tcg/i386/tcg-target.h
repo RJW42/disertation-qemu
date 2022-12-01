@@ -223,8 +223,11 @@ extern bool have_movbe;
 static inline void tb_target_set_jmp_target(uintptr_t tc_ptr, uintptr_t jmp_rx,
                                             uintptr_t jmp_rw, uintptr_t addr)
 {
-    // todo: rjw24
-    fprintf(pt_asm_log_file, "UPDATE: 0x%lX 0x%lx\n", (unsigned long)jmp_rw - 1, (unsigned long)addr);
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V3) {
+        // todo: rjw24
+        fprintf(pt_asm_log_file, "UPDATE: 0x%lX 0x%lx\n", (unsigned long)jmp_rw - 1, (unsigned long)addr);
+    }
     /* patch the branch destination */
     qatomic_set((int32_t *)jmp_rw, addr - (jmp_rx + 4));
     /* no need to flush icache explicitly */

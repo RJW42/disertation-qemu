@@ -20,9 +20,9 @@ int main() {
     Matrix m3;
 
 
-    for(int i = 0; i < 14; i++) {
-        Matrix m1 = rand_matrix(14, 14);
-        Matrix m2 = rand_matrix(14, 14);
+    for(int i = 0; i < 10; i++) {
+        Matrix m1 = rand_matrix(100, 100);
+        Matrix m2 = rand_matrix(100, 100);
         m3 = mult_matrix(m1, m2);
     }
 

@@ -490,12 +490,7 @@ cpu_tb_exec(CPUState *cpu, TranslationBlock *itb, int *tb_exit)
 
     qemu_thread_jit_execute();
 
-    // ********* rjw remove this ********* //   
-    // {
-    //     record_asm_block_2(itb);
-    // }
-    // ********* rjw remove this ********* //
-
+    // Todo: rjw24
     ipt_trace_enter();
     ret = tcg_qemu_tb_exec(env, tb_ptr);
     ipt_trace_exit();
@@ -554,10 +549,6 @@ static void cpu_exec_enter(CPUState *cpu)
     if (cc->tcg_ops->cpu_exec_enter) {
         cc->tcg_ops->cpu_exec_enter(cpu);
     }
-
-    // if(pt_trace_version == PT_TRACE_HARDWARE_V1 || pt_trace_version == PT_TRACE_HARDWARE_V2) {
-    //     ipt_trace_enter(); // Todo rjw24 remove this 
-    // }
 }
 
 static void cpu_exec_exit(CPUState *cpu)
@@ -567,10 +558,6 @@ static void cpu_exec_exit(CPUState *cpu)
     if (cc->tcg_ops->cpu_exec_exit) {
         cc->tcg_ops->cpu_exec_exit(cpu);
     }
-
-    // if(pt_trace_version == PT_TRACE_HARDWARE_V1 || pt_trace_version == PT_TRACE_HARDWARE_V2) {
-    //     ipt_trace_exit(); // Todo rjw24 remove this 
-    // }
 }
 
 void cpu_exec_step_atomic(CPUState *cpu)
@@ -679,9 +666,6 @@ static inline void tb_add_jump(TranslationBlock *tb, int n,
     /* add in TB jmp list */
     tb->jmp_list_next[n] = tb_next->jmp_list_head;
     tb_next->jmp_list_head = (uintptr_t)tb | n;
-
-    // todo: rjw24
-    record_asm_block_2(tb);
 
     qemu_spin_unlock(&tb_next->jmp_lock);
 

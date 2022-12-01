@@ -1473,7 +1473,7 @@ bool tcg_op_supported(TCGOpcode op)
 /* Note: we convert the 64 bit args to 32 bit and do some alignment
    and endian swap. Maybe it would be better to do the alignment
    and endian swap in tcg_reg_alloc_call(). */
-void tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args)
+static inline void _tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args)
 {
     int i, real_args, nb_rets, pi;
     unsigned typemask;
@@ -1669,6 +1669,21 @@ void tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args)
         }
     }
 #endif /* TCG_TARGET_EXTEND_ARGS */
+}
+
+void tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args)
+{
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2)
+        _tcg_gen_callN(helper_ctrace_ipt_exit, dh_retvar(void), 0, NULL);
+    if(pt_trace_version == PT_TRACE_HARDWARE_V3 && set_pt_branchpoint_call++ == 0)
+        _tcg_gen_callN(helper_ctrace_ipt_breakpoint, dh_retvar(void), 0, NULL);
+    
+    _tcg_gen_callN(func, ret, nargs, args);
+
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2) 
+        _tcg_gen_callN(helper_ctrace_ipt_enter, dh_retvar(void), 0, NULL);
+    if(pt_trace_version == PT_TRACE_HARDWARE_V3)
+        _tcg_gen_callN(helper_ctrace_ipt_breakpoint, dh_retvar(void), 0, NULL);
 }
 
 static void tcg_reg_alloc_start(TCGContext *s)
@@ -4054,7 +4069,8 @@ static void tcg_reg_alloc_call(TCGContext *s, TCGOp *op)
         tcg_out_call(s, func_addr, cif);
     }
 #else
-    if(pt_trace_version == PT_TRACE_HARDWARE_V2) {
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V3) {
         // todo: rjw24
         fprintf(pt_asm_log_file ,"CALL: 0x%lX %s\n", (unsigned long)s->code_ptr, info->name);
     }
@@ -4364,7 +4380,8 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb)
         case INDEX_op_set_label:
             tcg_reg_alloc_bb_end(s, s->reserved_regs);
 
-            if(pt_trace_version == PT_TRACE_HARDWARE_V2) {
+            if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+               pt_trace_version == PT_TRACE_HARDWARE_V3) {
                 // Todo: rjw24 
                 fprintf(pt_asm_log_file, "LBL: %u %lX\n", arg_label(op->args[0])->id, (unsigned long)s->code_ptr);
             }

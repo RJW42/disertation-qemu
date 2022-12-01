@@ -8,9 +8,9 @@ import timeit
 
 
 PROGRAM_FOLDER = "./programs"
-NUMBER_OF_RUNS = 100
+NUMBER_OF_RUNS = 1
 QEMU_RUN_SCRIPT = "../build/qemu-aarch64 -L ~/Documents/arm-gnu-toolchain/aarch64-none-linux-gnu/libc"
-VERSIONS = [0, 1]
+VERSIONS = [-1, 0, 1, 2, 4]
 
 
 def main():
@@ -47,7 +47,8 @@ def compile():
         return \
             isfile(file) and \
             re.search("benchmark-.*", file) and \
-            not file_name.endswith(".c")
+            not file_name.endswith(".c") and \
+            not file_name.endswith(".in")
 
     # Get list of all benchmarks
     progs = []
@@ -61,31 +62,50 @@ def compile():
 
 def benchmark(progs, version):
     # Benchmark all programs
-    def benchmark_prog(prog):
+    def benchmark_prog(prog, max_len):
+        # Check if this prog has an input file
+        in_file = "{}/{}.in".format(PROGRAM_FOLDER, prog)
+        if not (isfile(in_file)):
+            in_file = ""
+
         # Benchmark individual program
         times = []
+        p_len = len(prog[len("benchmark-") + 2:])
+        diff = max_len - p_len
+
+        script = "{} {} {}/{} {}".format(
+            QEMU_RUN_SCRIPT, 
+            "-pt-trace {}".format(version) if version >= 0 else "" ,
+            PROGRAM_FOLDER, prog, in_file
+        ) 
 
         for i in range(0, NUMBER_OF_RUNS):
             # Record execution time
             start_time = timeit.default_timer()
             subprocess.run(
-                "{} -pt-trace {} {}/{}".format(
-                    QEMU_RUN_SCRIPT, version, PROGRAM_FOLDER, prog
-                ), 
-                shell=True, stderr=subprocess.STDOUT
+                script, shell=True, stdout=subprocess.DEVNULL
             )
             times.append(timeit.default_timer() - start_time)
         
-        print(" Finished Program:", prog[len("benchmark-") + 2:])
-        print("  Average Time:", sum(times) / NUMBER_OF_RUNS)
+        print(
+            " Finished Program:", prog[len("benchmark-") + 2:], 
+            " " * diff,
+            "Avg Time:", sum(times) / NUMBER_OF_RUNS
+        )
 
         return times
 
     results = {}
 
+    max_len = 0
+    for prog in progs: 
+        p_len = len(prog[len("benchmark-") + 2:])
+        if p_len > max_len:
+            max_len = p_len
+
     print("Benchmarking Version ", version)
     for prog in progs:
-        results[prog] = benchmark_prog(prog)
+        results[prog] = benchmark_prog(prog, max_len)
 
     return results
 

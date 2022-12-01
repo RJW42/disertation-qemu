@@ -5,6 +5,7 @@
 #define PT_TRACE_SOFTWARE_V2 2
 #define PT_TRACE_HARDWARE_V1 3
 #define PT_TRACE_HARDWARE_V2 4
+#define PT_TRACE_HARDWARE_V3 5
 
 /* 
  * Version of pt_trace set 
@@ -22,6 +23,11 @@ extern FILE* pt_asm_log_file;
  */
 extern QemuOptsList qemu_pt_trace_opts;
 
+/*
+ * If the first breakpoint call has been set 
+ */
+extern int set_pt_branchpoint_call;
+
 void init_trace_gen(void);
 void clean_trace_gen(void);
 void ctrace_basic_block(long guest_pc);
@@ -29,6 +35,12 @@ void ctrace_record_mapping(long guest_pc, long host_pc);
 void pt_trace_opt_parse(const char *arg);
 void ipt_trace_enter(void);
 void ipt_trace_exit(void);
-void record_asm_block(TranslationBlock *tb);
+void ipt_trace_exception_exit(void);
+void ipt_trace_exception_enter(void);
+
+void ipt_helper_enter(void);
+void ipt_helper_exit(void);
+
+void ipt_breakpoint_call(void);
 
 #endif
