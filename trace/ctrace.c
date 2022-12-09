@@ -40,6 +40,7 @@ typedef unsigned long u64;
 /* Functions */
 static void init_save_dir(void);
 static void init_ipt(void);
+static void wait_for_pt_thread(void);
 
 static FILE* open_file(const char *file_name, const char *mode);
 
@@ -58,6 +59,7 @@ static struct perf_event_mmap_page *header;
 static void *base_area, *data_area, *aux_area;
 
 static volatile int stop_thread = 0;
+static volatile int reading_data = 0;
 
 static char* save_dir = NULL;
 
@@ -192,15 +194,23 @@ inline void ctrace_record_mapping(long guest_pc, long host_pc)
 
 
 /* ***** IPT ***** */
+static void wait_for_pt_thread(void) 
+{
+    // if(pt_trace_version != PT_TRACE_HARDWARE_V1 || 
+    //    pt_trace_version != PT_TRACE_HARDWARE_V2 || 
+    //    pt_trace_version != PT_TRACE_HARDWARE_V3) {
+    //     return;
+    // }
+    while(reading_data) {}
+}
+
 static void *trace_thread_proc(void *arg)
 {
     const unsigned char *buffer = (const unsigned char *)aux_area;
     u64 size = header->aux_size;
     u64 last_head = 0;
-    u64 tmp_size = 0;
 
     while(true) {
-        u64 tail = READ_ONCE(header->aux_tail);
         u64 head = READ_ONCE(header->aux_head);
         rmb();
 
@@ -209,155 +219,61 @@ static void *trace_thread_proc(void *arg)
             else continue;
         }
 
+        reading_data = 1;
+        // fprintf(stderr, "STARTING To Read\n");
+
         u64 wrapped_head = head % size;
         u64 wrapped_tail = last_head % size;
 
-        u64 old_size = tmp_size; 
-
         if(wrapped_head > wrapped_tail) {
+            // Check if diff small enough to continue 
+            // if ((wrapped_head - wrapped_tail) > 1024 * 20) reading_data = 1;
+
             // from tail --> head 
-            fprintf(stderr, "A: ");
-            
             fwrite(
                 buffer + wrapped_tail, 
                 wrapped_head - wrapped_tail, 
                 1, pt_dump
             );
-
-            tmp_size += wrapped_head - wrapped_tail;
         } else {
-            fprintf(stderr, "B: ");
-            
+            // Check if diff small enough to continue
+            // if (((size - wrapped_tail) + wrapped_head) > 1024 * 20) reading_data = 1;
+
             // from tail -> size 
             fwrite(
                 buffer + wrapped_tail, 
                 size - wrapped_tail, 
                 1, pt_dump
             );
-            tmp_size += size - wrapped_tail;
 
-            // // from start --> head 
+            // from start --> head 
             fwrite(
                 buffer, wrapped_head, 
                 1, pt_dump
             );
-            tmp_size += wrapped_head;
         }
-
-        fprintf(
-            stderr, "WRH=%lu, WRT=%lu, SIZE=%lu FSIZE=%lu H=%lu T=%lu\n", 
-            wrapped_head, wrapped_tail, tmp_size - old_size, tmp_size, head, tail
-        );
 
         last_head = head;
 
         u64 old_tail;
+
+        // fprintf(
+        //     stderr, "WRT=%lu WRH=%lu, H=%lu D=%lu\n", 
+        //     wrapped_tail, wrapped_head, head, wrapped_head > wrapped_tail ? 
+        //     wrapped_head - wrapped_tail : (size - wrapped_tail) + wrapped_head
+        // );
 
         mb();
 
         do {
 		    old_tail = __sync_val_compare_and_swap(&header->aux_tail, 0, 0);
 	    } while (!__sync_bool_compare_and_swap(&header->aux_tail, old_tail, head));
+
+        reading_data = 0;
     }
 
     return NULL;
 }
-
-// static void *trace_thread_proc(void *arg)
-// {
-//     // const unsigned char *buffer = (const unsigned char *)aux_area;
-//     //u64 size = header->aux_size;
-//     //u64 last_head = 0;
-//     //u64 tmp_size = 0;
-//     //u64 head_sum = 0;
-
-//     //unsigned char *restrict t_buffer = malloc(1073741824);
-
-//     u64 last_head=0;
-//     u64 sum=0;
-
-//     while(true) {
-//         u64 head = READ_ONCE(header->aux_head);
-//         rmb();
-
-//         if (head == last_head) {
-//             if(stop_thread) break;
-//             continue;
-//         }
-
-//         if(head > last_head && head-last_head < 4096) {
-//             sum += head-last_head;
-//         }
-
-//         fprintf(stderr, "head=%lx delta=%lx sum=%lx\n", 
-//             head, head-last_head, sum
-//         );
-
-//         last_head=head;
-//     }
-
-//         #if 0
-
-//         if (head == last_head) {
-//             if(stop_thread) break;
-//             else continue;
-//         }
-
-//         if(head > last_head) {
-//             head_sum += head - last_head;
-//         } else {
-//             head_sum += head;
-//         }
-
-//         u64 wrapped_head = head % size;
-//         u64 wrapped_tail = last_head % size;
-
-//         u64 old_size = tmp_size; 
-
-//         if(wrapped_head > wrapped_tail) {
-//         //     // from tail --> head 
-//             fprintf(stderr, "A: ");
-            
-//         //     memcpy(
-//         //         t_buffer + tmp_size, 
-//         //         buffer + wrapped_tail, 
-//         //         wrapped_head - wrapped_tail
-//         //     );
-
-//             tmp_size += wrapped_head - wrapped_tail;
-//         } else {
-//             fprintf(stderr, "B: ");
-            
-//         //     // from tail -> size 
-//         //     memcpy(
-//         //         t_buffer + tmp_size,
-//         //         buffer + wrapped_tail,
-//         //         size - wrapped_tail
-//         //     );
-//             tmp_size += size - wrapped_tail;
-
-//         //     header->aux_tail = last_head + (size - wrapped_tail);
-
-//         //     // // from start --> head 
-//         //     memcpy(
-//         //         t_buffer + tmp_size,
-//         //         buffer, wrapped_head
-//         //     );
-//             tmp_size += wrapped_head;
-//         }
-
-//         fprintf(
-//             stderr, "WRH=%lu, WRT=%lu, SIZE=%lu FSIZE=%lu H=%lu HS=%lu &&", 
-//             wrapped_head, wrapped_tail, tmp_size - old_size, tmp_size, head, head_sum
-//         );
-
-//         last_head = head;
-//     }
-
-//     fwrite(t_buffer, tmp_size, 1, pt_dump);
-// #endif
-//     return NULL;
-// }
 
 
 static void init_ipt(void) 
@@ -477,11 +393,25 @@ static int get_intel_pt_perf_type(void)
 }
 
 
+
+inline void ipt_helper_enter(void) 
+{
+    ioctl(perf_fd, PERF_EVENT_IOC_ENABLE);
+}
+
+
+inline void ipt_helper_exit(void) 
+{
+    ioctl(perf_fd, PERF_EVENT_IOC_DISABLE);
+}
+
+
 inline void ipt_trace_enter(void)
 {
     if(pt_trace_version == PT_TRACE_HARDWARE_V1 || 
        pt_trace_version == PT_TRACE_HARDWARE_V2 || 
        pt_trace_version == PT_TRACE_HARDWARE_V3) {
+        wait_for_pt_thread();
         ioctl(perf_fd, PERF_EVENT_IOC_ENABLE);
 
         if(pt_trace_version == PT_TRACE_HARDWARE_V2|| 
@@ -489,12 +419,6 @@ inline void ipt_trace_enter(void)
             fprintf(pt_asm_log_file, "IPT_START:\n");
         }
     }
-}
-
-
-inline void ipt_helper_enter(void) 
-{
-    ioctl(perf_fd, PERF_EVENT_IOC_ENABLE);
 }
 
 
@@ -508,21 +432,6 @@ inline void ipt_trace_exit(void)
         if(pt_trace_version == PT_TRACE_HARDWARE_V2 ||
            pt_trace_version == PT_TRACE_HARDWARE_V3) {
             fprintf(pt_asm_log_file, "IPT_STOP:\n");
-        }
-    }
-}
-
-
-inline void ipt_trace_exception_exit(void)
-{
-    if(pt_trace_version == PT_TRACE_HARDWARE_V1 || 
-       pt_trace_version == PT_TRACE_HARDWARE_V2 || 
-       pt_trace_version == PT_TRACE_HARDWARE_V3) {
-        ioctl(perf_fd, PERF_EVENT_IOC_DISABLE);
-
-        if(pt_trace_version == PT_TRACE_HARDWARE_V2 ||
-           pt_trace_version == PT_TRACE_HARDWARE_V3) {
-            fprintf(pt_asm_log_file, "IPT_STOP: Exception\n");
         }
     }
 }
@@ -543,16 +452,22 @@ inline void ipt_trace_exception_enter(void)
 }
 
 
-inline void ipt_helper_exit(void) 
+inline void ipt_trace_exception_exit(void)
 {
-    ioctl(perf_fd, PERF_EVENT_IOC_DISABLE);
+    if(pt_trace_version == PT_TRACE_HARDWARE_V1 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V3) {
+        ioctl(perf_fd, PERF_EVENT_IOC_DISABLE);
+
+        if(pt_trace_version == PT_TRACE_HARDWARE_V2 ||
+           pt_trace_version == PT_TRACE_HARDWARE_V3) {
+            fprintf(pt_asm_log_file, "IPT_STOP: Exception\n");
+        }
+    }
 }
 
 
-inline void ipt_breakpoint_call(void)
-{
-    
-}
+inline void ipt_breakpoint_call(void) { /* This function is ment to do nothing */ }
 
 
 /* ***** Misc ***** */

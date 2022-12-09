@@ -761,6 +761,8 @@ typedef struct CPUArchState {
     /* Linux syscall tagged address support */
     bool tagged_addr_enable;
 #endif
+
+    uint32_t chain_count;
 } CPUARMState;
 
 static inline void set_feature(CPUARMState *env, int feature)

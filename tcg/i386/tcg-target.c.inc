@@ -1395,7 +1395,10 @@ static void tcg_out_jxx(TCGContext *s, int opc, TCGLabel *l, int small)
     if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
        pt_trace_version == PT_TRACE_HARDWARE_V3) {
         // todo: rjw24
-        fprintf(pt_asm_log_file, "JXX: 0x%lX %u\n", (unsigned long)(intel_pt_ptr), l->id);
+        fprintf(
+            pt_asm_log_file, "JXX1: 0x%lX %u\n", 
+            (unsigned long)(intel_pt_ptr), l->id
+        );
     }
 }
 
@@ -2401,10 +2404,39 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
             tcg_out_jmp(s, tb_ret_addr);
         }
         break;
-    case INDEX_op_goto_tb:
+    case INDEX_op_goto_tb:      
         tcg_insn_unit *intel_pt_ptr = s->code_ptr;
+        tcg_insn_unit *intel_pt_ptr_jxx = s->code_ptr;
 
         if (s->tb_jmp_insn_offset) {
+            tcg_insn_unit *patch_ptr = NULL;
+
+            if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+               pt_trace_version == PT_TRACE_HARDWARE_V3) {
+                /* Todo: rjw24 */
+                /* Create some asm to decrement the chain count and jump
+                 * back to qemu if it has gone on for too long 
+                 * 
+                 * decd 78468[rbp]; decrement chain count by one 
+                 * cmpd 78468[rbp], 0; compare with zero 
+                 * je return addr; if count zero jump out of chaining 
+                 */
+                unsigned char ops[13] = { 
+                    0xFF, 0x8D, 0x84, 0x32, 0x01, 
+                    0x00, 0x83, 0xBD, 0x84, 0x32, 
+                    0x01, 0x00, 0x00 
+                };
+                for(int i = 0; i < 13; i++) {
+                    tcg_out8(s, ops[i]);
+                }
+                intel_pt_ptr_jxx = s->code_ptr;
+                tcg_out_opc(s, OPC_JCC_long + JCC_JE, 0, 0, 0);
+                patch_ptr = s->code_ptr;
+                tcg_out32(s, 0);
+    
+                intel_pt_ptr = s->code_ptr;
+            }
+
             /* direct jump method */
             int gap;
             /* jump displacement must be aligned for atomic patching;
@@ -2418,18 +2450,33 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
                 intel_pt_ptr = s->code_ptr;
             }
 
-            
-
             tcg_out8(s, OPC_JMP_long); /* jmp im */
             s->tb_jmp_insn_offset[a0] = tcg_current_code_size(s);
             tcg_out32(s, 0);
 
+
             if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
-               pt_trace_version == PT_TRACE_HARDWARE_V3) { 
+               pt_trace_version == PT_TRACE_HARDWARE_V3) {
                 // Todo: rjw24
-                fprintf(pt_asm_log_file, 
-                        "JMP2: 0x%lX 0x%lX\n", 
-                        (unsigned long)intel_pt_ptr, (unsigned long)(s->code_buf + s->tb_jmp_insn_offset[a0] + 4)
+
+                // patch the jump location of the stop direct chaining jump 
+                tcg_insn_unit *curr_ptr = s->code_ptr;
+                s->code_ptr = patch_ptr;
+                int32_t val = curr_ptr - patch_ptr;
+                tcg_out32(s, val - 4);
+                s->code_ptr = curr_ptr;
+
+                // output these two jumps 
+                fprintf(
+                    pt_asm_log_file, "JMP2: 0x%lX 0x%lX\n", 
+                    (unsigned long)intel_pt_ptr, 
+                    (unsigned long)(s->code_buf + s->tb_jmp_insn_offset[a0] + 4)
+                );
+
+                fprintf(
+                    pt_asm_log_file, "JXX2: 0x%lX 0x%lX\n", 
+                    (unsigned long)intel_pt_ptr_jxx, 
+                    (unsigned long)(curr_ptr)
                 );
             }
         } else {

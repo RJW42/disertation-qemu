@@ -460,6 +460,13 @@ const void *HELPER(lookup_tb_ptr)(CPUArchState *env)
         return tcg_code_gen_epilogue;
     }
 
+    {
+        CPUARMState* env_ = env;
+        if(env_->chain_count == 0) {
+            return tcg_code_gen_epilogue;
+        }   
+    }
+
     log_cpu_exec(pc, cpu, tb);
     pt_trace_exec_tb(tb);
 
@@ -489,6 +496,11 @@ cpu_tb_exec(CPUState *cpu, TranslationBlock *itb, int *tb_exit)
     
 
     qemu_thread_jit_execute();
+
+    {
+        CPUARMState* env_ = env;
+        env_->chain_count = 1000;
+    }
 
     // Todo: rjw24
     ipt_trace_enter();
