@@ -62,6 +62,7 @@ static volatile int stop_thread = 0;
 static volatile int reading_data = 0;
 
 static char* save_dir = NULL;
+static char* save_loc = NULL;
 
 /* Qemu Globals */
 int pt_trace_version = 0;
@@ -73,6 +74,16 @@ QemuOptsList qemu_pt_trace_opts = {
     .implied_opt_name = "pt-trace",
     .merge_lists = true,
     .head = QTAILQ_HEAD_INITIALIZER(qemu_pt_trace_opts.head),
+    .desc = {
+        {/* end of list */}
+    },
+};
+
+QemuOptsList qemu_pt_loc_opts = {
+    .name = "pt-loc",
+    .implied_opt_name = "pt-loc",
+    .merge_lists = true,
+    .head = QTAILQ_HEAD_INITIALIZER(qemu_pt_loc_opts.head),
     .desc = {
         {/* end of list */}
     },
@@ -119,9 +130,32 @@ static void init_save_dir(void)
 {
     save_dir = (char*)calloc(sizeof(char), 256);
 
-    strcat(save_dir, "/home/rjw24/pt-trace-data/");
+    if (save_loc == NULL ) {
+        // Arg not ser use default location 
+        strcat(save_dir, "/home/rjw24/pt-trace-data/");
+    } else {
+        // Use spesified location
+        strcat(save_dir, save_loc);
+    }
 
-    mkdir(save_dir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    // Check if save dir already exists 
+    struct stat st = {0};
+
+    if (stat(save_dir, &st) != -1) {
+        fprintf(stderr, 
+            "Warning pt save dir already exists: %s\n", save_dir
+        );
+        return;
+    }
+
+    int res = mkdir(
+        save_dir, 0700
+    );
+
+    if (res == -1) {
+        perror("Failed to create save directory");
+        exit(EXIT_FAILURE);
+    }
 }
 
 
@@ -196,11 +230,6 @@ inline void ctrace_record_mapping(long guest_pc, long host_pc)
 /* ***** IPT ***** */
 static void wait_for_pt_thread(void) 
 {
-    // if(pt_trace_version != PT_TRACE_HARDWARE_V1 || 
-    //    pt_trace_version != PT_TRACE_HARDWARE_V2 || 
-    //    pt_trace_version != PT_TRACE_HARDWARE_V3) {
-    //     return;
-    // }
     while(reading_data) {}
 }
 
@@ -480,4 +509,19 @@ void pt_trace_opt_parse(const char *optarg)
     }
 
     pt_trace_version = trace_version + 1;
+}
+
+void pt_trace_loc_opt_parse(const char *optarg) 
+{
+    // Todo rjw24: check if this is less than 256
+    int length = strlen(optarg);
+
+    save_loc = (char*)calloc(sizeof(char), length + 2);
+
+    strcpy(save_loc, optarg);
+
+    if(save_loc[length - 1] != '/') {
+        save_loc[length] = '/';
+        save_loc[length + 1] = 0;
+    }
 }

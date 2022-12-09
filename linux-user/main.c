@@ -417,6 +417,11 @@ static void handle_arg_pttrace(const char *arg)
     pt_trace_opt_parse(arg);   
 }
 
+static void handle_arg_pttrace_loc(const char *arg)
+{
+    pt_trace_loc_opt_parse(arg) ;
+}
+
 #if defined(TARGET_XTENSA)
 static void handle_arg_abi_call0(const char *arg)
 {
@@ -486,6 +491,8 @@ static const struct qemu_argument arg_table[] = {
      "",           "[[enable=]<pattern>][,events=<file>][,file=<file>]"},
     {"pt-trace",      "QEMU_PTTRACE",       true,  handle_arg_pttrace,
      "",           "set the pt-trace version to use"},
+    {"pt-loc",      "QEMU_PTLOC",       true,  handle_arg_pttrace_loc,
+     "",           "set the save location for pt trace data"},
 #ifdef CONFIG_PLUGIN
     {"plugin",     "QEMU_PLUGIN",      true,  handle_arg_plugin,
      "",           "[file=]<file>[,<argname>=<argvalue>]"},
@@ -688,6 +695,7 @@ int main(int argc, char **argv, char **envp)
 
     qemu_add_opts(&qemu_trace_opts);
     qemu_add_opts(&qemu_pt_trace_opts);
+    qemu_add_opts(&qemu_pt_loc_opts);
     qemu_plugin_add_opts();
 
     optind = parse_args(argc, argv);

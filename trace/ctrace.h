@@ -22,6 +22,7 @@ extern FILE* pt_asm_log_file;
  * Definition of QEMU options describing the pt trace 
  */
 extern QemuOptsList qemu_pt_trace_opts;
+extern QemuOptsList qemu_pt_loc_opts;
 
 /*
  * If the first breakpoint call has been set 
@@ -33,6 +34,7 @@ void clean_trace_gen(void);
 void ctrace_basic_block(long guest_pc);
 void ctrace_record_mapping(long guest_pc, long host_pc);
 void pt_trace_opt_parse(const char *arg);
+void pt_trace_loc_opt_parse(const char *optarg);
 
 void ipt_trace_enter(void);
 void ipt_trace_exit(void);
