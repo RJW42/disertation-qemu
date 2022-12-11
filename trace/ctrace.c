@@ -98,6 +98,10 @@ void init_trace_gen(void)
 
     init_save_dir();
 
+    FILE* info_file = open_file("trace.info", "w");
+    fprintf(info_file, "version: %d\n", (pt_trace_version - 1));
+    fclose(info_file);
+
     if(pt_trace_version == PT_TRACE_HARDWARE_V1 || 
        pt_trace_version == PT_TRACE_HARDWARE_V2 || 
        pt_trace_version == PT_TRACE_HARDWARE_V3) {
