@@ -1686,7 +1686,13 @@ static void tcg_out_jmp(TCGContext *s, const tcg_insn_unit *dest)
     if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
        pt_trace_version == PT_TRACE_HARDWARE_V3) { 
         // Todo: rjw24
-        fprintf(pt_asm_log_file, "JMP1: 0x%lX 0x%lX\n", (unsigned long)intel_pt_ptr, (unsigned long)dest);
+        intptr_t disp = tcg_pcrel_diff(s, dest) - 5;
+
+        if(disp == (int32_t)disp) {
+            fprintf(pt_asm_log_file, "JMP1: 0x%lX 0x%lX\n", (unsigned long)intel_pt_ptr, (unsigned long)dest);
+        } else {
+            fprintf(pt_asm_log_file, "JMP3: 0x%lX computed\n", (unsigned long)intel_pt_ptr);
+        }
     }
 }
 
@@ -2411,8 +2417,11 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
         if (s->tb_jmp_insn_offset) {
             tcg_insn_unit *patch_ptr = NULL;
 
-            if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
-               pt_trace_version == PT_TRACE_HARDWARE_V3) {
+            if(
+                pt_trace_version == PT_TRACE_HARDWARE_V1 ||
+                pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+                pt_trace_version == PT_TRACE_HARDWARE_V3
+            ) {
                 /* Todo: rjw24 */
                 /* Create some asm to decrement the chain count and jump
                  * back to qemu if it has gone on for too long 
@@ -2455,8 +2464,11 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
             tcg_out32(s, 0);
 
 
-            if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
-               pt_trace_version == PT_TRACE_HARDWARE_V3) {
+            if(
+                pt_trace_version == PT_TRACE_HARDWARE_V1 ||
+                pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+                pt_trace_version == PT_TRACE_HARDWARE_V3
+            ) {
                 // Todo: rjw24
 
                 // patch the jump location of the stop direct chaining jump 
@@ -2466,18 +2478,21 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
                 tcg_out32(s, val - 4);
                 s->code_ptr = curr_ptr;
 
-                // output these two jumps 
-                fprintf(
-                    pt_asm_log_file, "JMP2: 0x%lX 0x%lX\n", 
-                    (unsigned long)intel_pt_ptr, 
-                    (unsigned long)(s->code_buf + s->tb_jmp_insn_offset[a0] + 4)
-                );
 
-                fprintf(
-                    pt_asm_log_file, "JXX2: 0x%lX 0x%lX\n", 
-                    (unsigned long)intel_pt_ptr_jxx, 
-                    (unsigned long)(curr_ptr)
-                );
+                if(pt_trace_version != PT_TRACE_HARDWARE_V1) {
+                    // output these two jumps 
+                    fprintf(
+                        pt_asm_log_file, "JMP2: 0x%lX 0x%lX\n", 
+                        (unsigned long)intel_pt_ptr, 
+                        (unsigned long)(s->code_buf + s->tb_jmp_insn_offset[a0] + 4)
+                    );
+
+                    fprintf(
+                        pt_asm_log_file, "JXX2: 0x%lX 0x%lX\n", 
+                        (unsigned long)intel_pt_ptr_jxx, 
+                        (unsigned long)(curr_ptr)
+                    );
+                }
             }
         } else {
             /* indirect jump method */

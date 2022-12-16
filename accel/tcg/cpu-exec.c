@@ -461,10 +461,13 @@ const void *HELPER(lookup_tb_ptr)(CPUArchState *env)
     }
 
     {
+        // todo: rjw24
         CPUARMState* env_ = env;
         if(env_->chain_count == 0) {
             return tcg_code_gen_epilogue;
-        }   
+        } else {
+            env_->chain_count -= 1;
+        }
     }
 
     log_cpu_exec(pc, cpu, tb);
