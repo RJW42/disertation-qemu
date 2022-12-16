@@ -66,6 +66,7 @@ static char* save_loc = NULL;
 
 /* Qemu Globals */
 int pt_trace_version = 0;
+int pt_chain_count_limit = 0;
 int set_pt_branchpoint_call = 0;
 FILE* pt_asm_log_file = NULL;
 
@@ -104,7 +105,8 @@ void init_trace_gen(void)
 
     if(pt_trace_version == PT_TRACE_HARDWARE_V1 || 
        pt_trace_version == PT_TRACE_HARDWARE_V2 || 
-       pt_trace_version == PT_TRACE_HARDWARE_V3) {
+       pt_trace_version == PT_TRACE_HARDWARE_V3 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V4) {
         // Init file to store intel pt binary data 
         // and another to store the mapping between guest 
         // and host ip 
@@ -124,8 +126,15 @@ void init_trace_gen(void)
 
     if(pt_trace_version == PT_TRACE_HARDWARE_V1 || 
        pt_trace_version == PT_TRACE_HARDWARE_V2 || 
-       pt_trace_version == PT_TRACE_HARDWARE_V3) {
+       pt_trace_version == PT_TRACE_HARDWARE_V3 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V4) {
         init_ipt();
+    }
+
+    if (pt_trace_version == PT_TRACE_HARDWARE_V4) {
+        pt_chain_count_limit = 1;
+    } else {
+        pt_chain_count_limit = 1000;
     }
 }
 
@@ -227,6 +236,9 @@ inline void ctrace_basic_block(long guest_pc)
 
 inline void ctrace_record_mapping(long guest_pc, long host_pc) 
 {
+    if (pt_trace_version == PT_TRACE_HARDWARE_V4) {
+        host_pc += 9;
+    }
     fprintf(mapping_data, "%lX, %lX\n", guest_pc, host_pc);
 }
 
@@ -443,7 +455,8 @@ inline void ipt_trace_enter(void)
 {
     if(pt_trace_version == PT_TRACE_HARDWARE_V1 || 
        pt_trace_version == PT_TRACE_HARDWARE_V2 || 
-       pt_trace_version == PT_TRACE_HARDWARE_V3) {
+       pt_trace_version == PT_TRACE_HARDWARE_V3 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V4) {
         wait_for_pt_thread();
         ioctl(perf_fd, PERF_EVENT_IOC_ENABLE);
 
@@ -459,7 +472,8 @@ inline void ipt_trace_exit(void)
 {
     if(pt_trace_version == PT_TRACE_HARDWARE_V1 || 
        pt_trace_version == PT_TRACE_HARDWARE_V2 || 
-       pt_trace_version == PT_TRACE_HARDWARE_V3) {
+       pt_trace_version == PT_TRACE_HARDWARE_V3 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V4) {
         ioctl(perf_fd, PERF_EVENT_IOC_DISABLE);
 
         if(pt_trace_version == PT_TRACE_HARDWARE_V2 ||
@@ -474,7 +488,8 @@ inline void ipt_trace_exception_enter(void)
 {
     if(pt_trace_version == PT_TRACE_HARDWARE_V1 || 
        pt_trace_version == PT_TRACE_HARDWARE_V2 || 
-       pt_trace_version == PT_TRACE_HARDWARE_V3) {
+       pt_trace_version == PT_TRACE_HARDWARE_V3 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V4) {
         ioctl(perf_fd, PERF_EVENT_IOC_ENABLE);
 
         if(pt_trace_version == PT_TRACE_HARDWARE_V2 ||
@@ -489,7 +504,8 @@ inline void ipt_trace_exception_exit(void)
 {
     if(pt_trace_version == PT_TRACE_HARDWARE_V1 || 
        pt_trace_version == PT_TRACE_HARDWARE_V2 || 
-       pt_trace_version == PT_TRACE_HARDWARE_V3) {
+       pt_trace_version == PT_TRACE_HARDWARE_V3 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V4) {
         ioctl(perf_fd, PERF_EVENT_IOC_DISABLE);
 
         if(pt_trace_version == PT_TRACE_HARDWARE_V2 ||
@@ -507,7 +523,7 @@ inline void ipt_breakpoint_call(void) { /* This function is ment to do nothing *
 void pt_trace_opt_parse(const char *optarg)
 {
     int trace_version = optarg[0] - '0';
-    if(trace_version < 0 || trace_version > 4) {
+    if(trace_version < 0 || trace_version > 5) {
         printf("Invalid pt-trace arg\n");
         exit(1);
     }

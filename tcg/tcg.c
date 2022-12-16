@@ -4339,6 +4339,22 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb)
     s->pool_labels = NULL;
 #endif
 
+    if (pt_trace_version == PT_TRACE_HARDWARE_V4) {
+        tcg_out8(s, 0x48);
+        tcg_out8(s, 0x8d);
+        tcg_out8(s, 0x05);
+        tcg_out8(s, 0x02);
+        tcg_out8(s, 0x00);
+        tcg_out8(s, 0x00);
+        tcg_out8(s, 0x00);
+        tcg_out8(s, 0xff);
+        tcg_out8(s, 0xd0);
+        tcg_out8(s, 0x48);
+        tcg_out8(s, 0x83);
+        tcg_out8(s, 0xc4);
+        tcg_out8(s, 0x08);
+    }
+
     num_insns = -1;
     QTAILQ_FOREACH(op, &s->ops, link) {
         TCGOpcode opc = op->opc;

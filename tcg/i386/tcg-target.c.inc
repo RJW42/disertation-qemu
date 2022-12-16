@@ -2420,7 +2420,8 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
             if(
                 pt_trace_version == PT_TRACE_HARDWARE_V1 ||
                 pt_trace_version == PT_TRACE_HARDWARE_V2 || 
-                pt_trace_version == PT_TRACE_HARDWARE_V3
+                pt_trace_version == PT_TRACE_HARDWARE_V3 || 
+                pt_trace_version == PT_TRACE_HARDWARE_V4
             ) {
                 /* Todo: rjw24 */
                 /* Create some asm to decrement the chain count and jump
@@ -2467,7 +2468,8 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
             if(
                 pt_trace_version == PT_TRACE_HARDWARE_V1 ||
                 pt_trace_version == PT_TRACE_HARDWARE_V2 || 
-                pt_trace_version == PT_TRACE_HARDWARE_V3
+                pt_trace_version == PT_TRACE_HARDWARE_V3 || 
+                pt_trace_version == PT_TRACE_HARDWARE_V4
             ) {
                 // Todo: rjw24
 
@@ -2479,7 +2481,8 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
                 s->code_ptr = curr_ptr;
 
 
-                if(pt_trace_version != PT_TRACE_HARDWARE_V1) {
+                if(pt_trace_version != PT_TRACE_HARDWARE_V1 &&
+                   pt_trace_version != PT_TRACE_HARDWARE_V4) {
                     // output these two jumps 
                     fprintf(
                         pt_asm_log_file, "JMP2: 0x%lX 0x%lX\n", 

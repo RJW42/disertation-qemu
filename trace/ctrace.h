@@ -6,11 +6,18 @@
 #define PT_TRACE_HARDWARE_V1 3
 #define PT_TRACE_HARDWARE_V2 4
 #define PT_TRACE_HARDWARE_V3 5
+#define PT_TRACE_HARDWARE_V4 6
 
 /* 
  * Version of pt_trace set 
  */
 extern int pt_trace_version;
+
+/*
+ * How long direct chaining should be allowed 
+ * to continue before stopping 
+ */
+extern int pt_chain_count_limit;
 
 /*
  * Used for logging asm

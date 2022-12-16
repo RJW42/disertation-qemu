@@ -502,7 +502,7 @@ cpu_tb_exec(CPUState *cpu, TranslationBlock *itb, int *tb_exit)
 
     {
         CPUARMState* env_ = env;
-        env_->chain_count = 1000;
+        env_->chain_count = pt_chain_count_limit;
     }
 
     // Todo: rjw24

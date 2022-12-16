@@ -9930,7 +9930,8 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb, int max_insns,
 
     if(pt_trace_version == PT_TRACE_HARDWARE_V1 || 
        pt_trace_version == PT_TRACE_HARDWARE_V2 || 
-       pt_trace_version == PT_TRACE_HARDWARE_V3) {
+       pt_trace_version == PT_TRACE_HARDWARE_V3 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V4) {
         ctrace_record_mapping((unsigned long)tb->pc, (unsigned long)tb->tc.ptr);
     }
 }
