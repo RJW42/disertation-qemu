@@ -463,7 +463,7 @@ const void *HELPER(lookup_tb_ptr)(CPUArchState *env)
     {
         // todo: rjw24
         CPUARMState* env_ = env;
-        if(env_->chain_count == 0) {
+        if(env_->chain_count == 0  || env_->chain_count == 1) {
             return tcg_code_gen_epilogue;
         } else {
             env_->chain_count -= 1;
@@ -509,6 +509,13 @@ cpu_tb_exec(CPUState *cpu, TranslationBlock *itb, int *tb_exit)
     ipt_trace_enter();
     ret = tcg_qemu_tb_exec(env, tb_ptr);
     ipt_trace_exit();
+
+    {
+        CPUARMState* env_ = env;
+        if (env_->chain_count > 1000 ) {
+            printf("%u\n", env_->chain_count);
+        }
+    }
 
     cpu->can_do_io = 1;
     /*

@@ -132,7 +132,7 @@ void init_trace_gen(void)
     }
 
     if (pt_trace_version == PT_TRACE_HARDWARE_V4) {
-        pt_chain_count_limit = 1;
+        pt_chain_count_limit = 500;
     } else {
         pt_chain_count_limit = 1000;
     }
