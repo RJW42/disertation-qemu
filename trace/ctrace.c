@@ -55,6 +55,8 @@ static int perf_fd = -1;
 
 static pthread_t trace_thread = 0;
 
+static pid_t qemu_thread = 0;
+
 static struct perf_event_mmap_page *header;
 static void *base_area, *data_area, *aux_area;
 
@@ -251,78 +253,8 @@ static void wait_for_pt_thread(void)
 
 static void *trace_thread_proc(void *arg)
 {
-    const unsigned char *buffer = (const unsigned char *)aux_area;
-    u64 size = header->aux_size;
-    u64 last_head = 0;
+    printf("Qemu Thread: %d\n", qemu_thread);
 
-    while(true) {
-        u64 head = READ_ONCE(header->aux_head);
-        rmb();
-
-        if (head == last_head) {
-            if(stop_thread) break;
-            else continue;
-        }
-
-        reading_data = 1;
-        // fprintf(stderr, "STARTING To Read\n");
-
-        u64 wrapped_head = head % size;
-        u64 wrapped_tail = last_head % size;
-
-        if(wrapped_head > wrapped_tail) {
-            // Check if diff small enough to continue 
-            // if ((wrapped_head - wrapped_tail) > 1024 * 20) reading_data = 1;
-
-            // from tail --> head 
-            fwrite(
-                buffer + wrapped_tail, 
-                wrapped_head - wrapped_tail, 
-                1, pt_dump
-            );
-        } else {
-            // Check if diff small enough to continue
-            // if (((size - wrapped_tail) + wrapped_head) > 1024 * 20) reading_data = 1;
-
-            // from tail -> size 
-            fwrite(
-                buffer + wrapped_tail, 
-                size - wrapped_tail, 
-                1, pt_dump
-            );
-
-            // from start --> head 
-            fwrite(
-                buffer, wrapped_head, 
-                1, pt_dump
-            );
-        }
-
-        last_head = head;
-
-        u64 old_tail;
-
-        // fprintf(
-        //     stderr, "WRT=%lu WRH=%lu, H=%lu D=%lu\n", 
-        //     wrapped_tail, wrapped_head, head, wrapped_head > wrapped_tail ? 
-        //     wrapped_head - wrapped_tail : (size - wrapped_tail) + wrapped_head
-        // );
-
-        mb();
-
-        do {
-		    old_tail = __sync_val_compare_and_swap(&header->aux_tail, 0, 0);
-	    } while (!__sync_bool_compare_and_swap(&header->aux_tail, old_tail, head));
-
-        reading_data = 0;
-    }
-
-    return NULL;
-}
-
-
-static void init_ipt(void) 
-{
     // Set-up the perf_event_attr structure
     struct perf_event_attr pea;
     memset(&pea, 0, sizeof(pea));
@@ -341,7 +273,7 @@ static void init_ipt(void)
     pea.config = 0x2001; //0010000000000001
 
     // Open the event.
-    perf_fd = syscall(SYS_perf_event_open, &pea, 0, -1, -1, 0);
+    perf_fd = syscall(SYS_perf_event_open, &pea, qemu_thread, -1, -1, 0);
     if (perf_fd < 0) {
         fclose(pt_dump);
         fprintf(stderr, "intel-pt: could not enable tracing\n");
@@ -387,30 +319,78 @@ static void init_ipt(void)
         exit(EXIT_FAILURE);
     }
 
+
+    // Begin recording
+    const unsigned char *buffer = (const unsigned char *)aux_area;
+    u64 size = header->aux_size;
+    u64 last_head = 0;
+    reading_data = 0;
+
+    while(true) {
+        u64 head = READ_ONCE(header->aux_head);
+        rmb();
+
+        if (head == last_head) {
+            if(stop_thread) break;
+            else continue;
+        }
+
+        reading_data = 1;
+
+        u64 wrapped_head = head % size;
+        u64 wrapped_tail = last_head % size;
+
+        if(wrapped_head > wrapped_tail) {
+            // from tail --> head 
+            fwrite(
+                buffer + wrapped_tail, 
+                wrapped_head - wrapped_tail, 
+                1, pt_dump
+            );
+        } else {
+            // from tail -> size 
+            fwrite(
+                buffer + wrapped_tail, 
+                size - wrapped_tail, 
+                1, pt_dump
+            );
+
+            // from start --> head 
+            fwrite(
+                buffer, wrapped_head, 
+                1, pt_dump
+            );
+        }
+
+        last_head = head;
+
+        u64 old_tail;
+
+        // fprintf(
+        //     stderr, "WRT=%lu WRH=%lu, H=%lu D=%lu\n", 
+        //     wrapped_tail, wrapped_head, head, wrapped_head > wrapped_tail ? 
+        //     wrapped_head - wrapped_tail : (size - wrapped_tail) + wrapped_head
+        // );
+
+        mb();
+
+        do {
+		    old_tail = __sync_val_compare_and_swap(&header->aux_tail, 0, 0);
+	    } while (!__sync_bool_compare_and_swap(&header->aux_tail, old_tail, head));
+
+        reading_data = 0;
+    }
+
+    return NULL;
+}
+
+
+static void init_ipt(void) 
+{
+    qemu_thread = getpid();
+    reading_data = 1;
     pthread_create(&trace_thread, NULL, trace_thread_proc, NULL);
-
-    cpu_set_t cpuset; 
-    CPU_ZERO(&cpuset);
-    for(int i = 3; i < 6; i++)
-        CPU_SET(i, &cpuset);
-
-    if (pthread_setaffinity_np(trace_thread, sizeof(cpuset), &cpuset) != 0) {
-        printf("Failed to set trace thread affinity\n");
-        exit(EXIT_FAILURE);
-    }
-
-
-    pthread_t curr = pthread_self();
-
-    cpu_set_t cpuset_; 
-    CPU_ZERO(&cpuset_);
-    for(int i = 0; i < 3; i++)
-        CPU_SET(i, &cpuset_);
-
-    if(pthread_setaffinity_np(curr, sizeof(cpuset_), &cpuset_) != 0) {
-        printf("Failed to set qemu thread affinity\n");
-        exit(EXIT_FAILURE);
-    }
+    while(reading_data) {};
 }
 
 
@@ -464,6 +444,7 @@ inline void ipt_trace_enter(void)
            pt_trace_version == PT_TRACE_HARDWARE_V3) {
             fprintf(pt_asm_log_file, "IPT_START:\n");
         }
+        // fprintf(stderr, "IPT_START:\n");
     }
 }
 
@@ -480,6 +461,7 @@ inline void ipt_trace_exit(void)
            pt_trace_version == PT_TRACE_HARDWARE_V3) {
             fprintf(pt_asm_log_file, "IPT_STOP:\n");
         }
+        // fprintf(stderr, "IPT_STOP:\n");
     }
 }
 
@@ -512,6 +494,7 @@ inline void ipt_trace_exception_exit(void)
            pt_trace_version == PT_TRACE_HARDWARE_V3) {
             fprintf(pt_asm_log_file, "IPT_STOP: Exception\n");
         }
+        // fprintf(stderr, "IPT_STOP:\n");
     }
 }
 

@@ -512,7 +512,7 @@ cpu_tb_exec(CPUState *cpu, TranslationBlock *itb, int *tb_exit)
 
     {
         CPUARMState* env_ = env;
-        if (env_->chain_count > 1000 ) {
+        if (env_->chain_count > pt_chain_count_limit ) {
             printf("%u\n", env_->chain_count);
         }
     }
