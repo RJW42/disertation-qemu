@@ -1,3 +1,7 @@
+DEF_HELPER_0(ctrace_ipt_enter, void)
+DEF_HELPER_0(ctrace_ipt_exit, void)
+DEF_HELPER_0(ctrace_ipt_breakpoint, void)
+
 DEF_HELPER_1(ctrace_log_bb, void, i64)
 
 DEF_HELPER_FLAGS_1(sxtb16, TCG_CALL_NO_RWG_SE, i32, i32)

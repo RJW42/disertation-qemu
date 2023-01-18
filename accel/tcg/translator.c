@@ -71,6 +71,7 @@ void translator_loop(CPUState *cpu, TranslationBlock *tb, int max_insns,
     tcg_clear_temp_count();
 
     /* Start translating.  */
+    
     gen_tb_start(db->tb);
     ops->tb_start(db, cpu);
     tcg_debug_assert(db->is_jmp == DISAS_NEXT);  /* no early exit */

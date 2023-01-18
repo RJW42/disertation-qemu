@@ -11275,3 +11275,15 @@ void aarch64_sve_change_el(CPUARMState *env, int old_el,
 void HELPER(ctrace_log_bb)(long unsigned pc) {
     ctrace_basic_block(pc);
 }
+
+void HELPER(ctrace_ipt_enter)(void) {
+    ipt_helper_enter();
+}
+
+void HELPER(ctrace_ipt_exit)(void) {
+    ipt_helper_exit();
+}
+
+void HELPER(ctrace_ipt_breakpoint)(void) {
+    ipt_breakpoint_call();
+}

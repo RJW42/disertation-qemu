@@ -9928,8 +9928,12 @@ void gen_intermediate_code(CPUState *cpu, TranslationBlock *tb, int max_insns,
     translator_loop(cpu, tb, max_insns, pc, host_pc, ops, &dc.base);
 
 
-    if(pt_trace_version == PT_TRACE_HARDWARE_V1)
+    if(pt_trace_version == PT_TRACE_HARDWARE_V1 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V3 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V4) {
         ctrace_record_mapping((unsigned long)tb->pc, (unsigned long)tb->tc.ptr);
+    }
 }
 
 

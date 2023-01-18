@@ -25,6 +25,8 @@
 #include "exec/cpu_ldst.h"
 #include "cpregs.h"
 
+#include "trace.h"
+
 #define SIGNBIT (uint32_t)0x80000000
 #define SIGNBIT64 ((uint64_t)1 << 63)
 
@@ -405,7 +407,9 @@ void HELPER(exception_with_syndrome_el)(CPUARMState *env, uint32_t excp,
  */
 void HELPER(exception_with_syndrome)(CPUARMState *env, uint32_t excp,
                                      uint32_t syndrome)
-{
+{   
+    // Todo: rjw24
+    ipt_trace_exception_exit();
     raise_exception(env, excp, syndrome, exception_target_el(env));
 }
 

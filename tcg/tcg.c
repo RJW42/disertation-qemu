@@ -38,6 +38,9 @@
 #include "qemu/cacheflush.h"
 #include "qemu/cacheinfo.h"
 
+/* Note: rjw24 */
+#include "trace/ctrace.h"
+
 /* Note: the long term plan is to reduce the dependencies on the QEMU
    CPU definitions. Currently they are used for qemu_ld/st
    instructions */
@@ -1470,7 +1473,7 @@ bool tcg_op_supported(TCGOpcode op)
 /* Note: we convert the 64 bit args to 32 bit and do some alignment
    and endian swap. Maybe it would be better to do the alignment
    and endian swap in tcg_reg_alloc_call(). */
-void tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args)
+static inline void _tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args)
 {
     int i, real_args, nb_rets, pi;
     unsigned typemask;
@@ -1666,6 +1669,21 @@ void tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args)
         }
     }
 #endif /* TCG_TARGET_EXTEND_ARGS */
+}
+
+void tcg_gen_callN(void *func, TCGTemp *ret, int nargs, TCGTemp **args)
+{
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2)
+        _tcg_gen_callN(helper_ctrace_ipt_exit, dh_retvar(void), 0, NULL);
+    if(pt_trace_version == PT_TRACE_HARDWARE_V3 && set_pt_branchpoint_call++ == 0)
+        _tcg_gen_callN(helper_ctrace_ipt_breakpoint, dh_retvar(void), 0, NULL);
+    
+    _tcg_gen_callN(func, ret, nargs, args);
+
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2) 
+        _tcg_gen_callN(helper_ctrace_ipt_enter, dh_retvar(void), 0, NULL);
+    if(pt_trace_version == PT_TRACE_HARDWARE_V3)
+        _tcg_gen_callN(helper_ctrace_ipt_breakpoint, dh_retvar(void), 0, NULL);
 }
 
 static void tcg_reg_alloc_start(TCGContext *s)
@@ -4051,6 +4069,11 @@ static void tcg_reg_alloc_call(TCGContext *s, TCGOp *op)
         tcg_out_call(s, func_addr, cif);
     }
 #else
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V3) {
+        // todo: rjw24
+        fprintf(pt_asm_log_file ,"CALL: 0x%lX %s\n", (unsigned long)s->code_ptr, info->name);
+    }
     tcg_out_call(s, func_addr);
 #endif
 
@@ -4307,7 +4330,7 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb)
      * buffer management.  Having only this done here is confusing.
      */
     s->code_buf = tcg_splitwx_to_rw(tb->tc.ptr);
-    s->code_ptr = s->code_buf;
+        s->code_ptr = s->code_buf;
 
 #ifdef TCG_TARGET_NEED_LDST_LABELS
     QSIMPLEQ_INIT(&s->ldst_labels);
@@ -4315,6 +4338,22 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb)
 #ifdef TCG_TARGET_NEED_POOL_LABELS
     s->pool_labels = NULL;
 #endif
+
+    if (pt_trace_version == PT_TRACE_HARDWARE_V4) {
+        tcg_out8(s, 0x48);
+        tcg_out8(s, 0x8d);
+        tcg_out8(s, 0x05);
+        tcg_out8(s, 0x02);
+        tcg_out8(s, 0x00);
+        tcg_out8(s, 0x00);
+        tcg_out8(s, 0x00);
+        tcg_out8(s, 0xff);
+        tcg_out8(s, 0xd0);
+        tcg_out8(s, 0x48);
+        tcg_out8(s, 0x83);
+        tcg_out8(s, 0xc4);
+        tcg_out8(s, 0x08);
+    }
 
     num_insns = -1;
     QTAILQ_FOREACH(op, &s->ops, link) {
@@ -4356,6 +4395,12 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb)
             break;
         case INDEX_op_set_label:
             tcg_reg_alloc_bb_end(s, s->reserved_regs);
+
+            if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+               pt_trace_version == PT_TRACE_HARDWARE_V3) {
+                // Todo: rjw24 
+                fprintf(pt_asm_log_file, "LBL: %u %lX\n", arg_label(op->args[0])->id, (unsigned long)s->code_ptr);
+            }
             tcg_out_label(s, arg_label(op->args[0]));
             break;
         case INDEX_op_call:
@@ -4390,6 +4435,7 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb)
             return -2;
         }
     }
+
     tcg_debug_assert(num_insns >= 0);
     s->gen_insn_end_off[num_insns] = tcg_current_code_size(s);
 

@@ -1433,8 +1433,11 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
     tcg_ctx->tb_cflags = cflags;
  tb_overflow:
 
-    // Record mapping
-    // add_trace_mapping(pc, phys_pc);
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V3) {
+        // Todo: rjw24
+        fprintf(pt_asm_log_file, "BLOCK: 0x%lX\n", (unsigned long)tb->tc.ptr);
+    }
 
 #ifdef CONFIG_PROFILER
     /* includes aborted translations because of exceptions */
@@ -1522,6 +1525,12 @@ TranslationBlock *tb_gen_code(CPUState *cpu,
         goto buffer_overflow;
     }
     tb->tc.size = gen_code_size;
+
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V3) {
+        // Todo: rjw24
+        fprintf(pt_asm_log_file, "BLOCK_SIZE: %lu\n", tb->tc.size);
+    }
 
 #ifdef CONFIG_PROFILER
     qatomic_set(&prof->code_time, prof->code_time + profile_getclock() - ti);

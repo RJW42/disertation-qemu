@@ -24,6 +24,7 @@
 
 #include "../tcg-ldst.c.inc"
 #include "../tcg-pool.c.inc"
+#include "trace/ctrace.h"
 
 #ifdef CONFIG_DEBUG_TCG
 static const char * const tcg_target_reg_names[TCG_TARGET_NB_REGS] = {
@@ -1349,6 +1350,7 @@ static void tcg_out_addi(TCGContext *s, int reg, tcg_target_long val)
 static void tcg_out_jxx(TCGContext *s, int opc, TCGLabel *l, int small)
 {
     int32_t val, val1;
+    tcg_insn_unit *intel_pt_ptr = s->code_ptr;
 
     if (l->has_value) {
         val = tcg_pcrel_diff(s, l->u.value_ptr);
@@ -1388,6 +1390,15 @@ static void tcg_out_jxx(TCGContext *s, int opc, TCGLabel *l, int small)
         }
         tcg_out_reloc(s, s->code_ptr, R_386_PC32, l, -4);
         s->code_ptr += 4;
+    }
+
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V3) {
+        // todo: rjw24
+        fprintf(
+            pt_asm_log_file, "JXX1: 0x%lX %u\n", 
+            (unsigned long)(intel_pt_ptr), l->id
+        );
     }
 }
 
@@ -1668,7 +1679,21 @@ static inline void tcg_out_call(TCGContext *s, const tcg_insn_unit *dest)
 
 static void tcg_out_jmp(TCGContext *s, const tcg_insn_unit *dest)
 {
+    tcg_insn_unit *intel_pt_ptr = s->code_ptr;
+
     tcg_out_branch(s, 0, dest);
+
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V3) { 
+        // Todo: rjw24
+        intptr_t disp = tcg_pcrel_diff(s, dest) - 5;
+
+        if(disp == (int32_t)disp) {
+            fprintf(pt_asm_log_file, "JMP1: 0x%lX 0x%lX\n", (unsigned long)intel_pt_ptr, (unsigned long)dest);
+        } else {
+            fprintf(pt_asm_log_file, "JMP3: 0x%lX computed\n", (unsigned long)intel_pt_ptr);
+        }
+    }
 }
 
 static void tcg_out_nopn(TCGContext *s, int n)
@@ -2033,6 +2058,12 @@ static bool tcg_out_fail_alignment(TCGContext *s, TCGLabelQemuLdst *l)
     /* resolve label address */
     tcg_patch32(l->label_ptr[0], s->code_ptr - l->label_ptr[0] - 4);
 
+    if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+       pt_trace_version == PT_TRACE_HARDWARE_V3) {
+        // todo: rjw24
+        fprintf(pt_asm_log_file, "JXX_LDST: 0x%lX 0x%lX\n", (unsigned long)l->label_ptr[0] - 2, (unsigned long)(s->code_ptr));
+    }
+
     if (TCG_TARGET_REG_BITS == 32) {
         int ofs = 0;
 
@@ -2379,8 +2410,43 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
             tcg_out_jmp(s, tb_ret_addr);
         }
         break;
-    case INDEX_op_goto_tb:
+    case INDEX_op_goto_tb:      
+        tcg_insn_unit *intel_pt_ptr = s->code_ptr;
+        tcg_insn_unit *intel_pt_ptr_jxx = s->code_ptr;
+
         if (s->tb_jmp_insn_offset) {
+            tcg_insn_unit *patch_ptr = NULL;
+
+            if(
+                pt_trace_version == PT_TRACE_HARDWARE_V1 ||
+                pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+                pt_trace_version == PT_TRACE_HARDWARE_V3 || 
+                pt_trace_version == PT_TRACE_HARDWARE_V4
+            ) {
+                /* Todo: rjw24 */
+                /* Create some asm to decrement the chain count and jump
+                 * back to qemu if it has gone on for too long 
+                 * 
+                 * decd 78468[rbp]; decrement chain count by one 
+                 * cmpd 78468[rbp], 0; compare with zero 
+                 * je return addr; if count zero jump out of chaining 
+                 */
+                unsigned char ops[13] = { 
+                    0xFF, 0x8D, 0x84, 0x32, 0x01, 
+                    0x00, 0x83, 0xBD, 0x84, 0x32, 
+                    0x01, 0x00, 0x00 
+                };
+                for(int i = 0; i < 13; i++) {
+                    tcg_out8(s, ops[i]);
+                }
+                intel_pt_ptr_jxx = s->code_ptr;
+                tcg_out_opc(s, OPC_JCC_long + JCC_JE, 0, 0, 0);
+                patch_ptr = s->code_ptr;
+                tcg_out32(s, 0);
+    
+                intel_pt_ptr = s->code_ptr;
+            }
+
             /* direct jump method */
             int gap;
             /* jump displacement must be aligned for atomic patching;
@@ -2389,14 +2455,61 @@ static inline void tcg_out_op(TCGContext *s, TCGOpcode opc,
             gap = QEMU_ALIGN_PTR_UP(s->code_ptr + 1, 4) - s->code_ptr;
             if (gap != 1) {
                 tcg_out_nopn(s, gap - 1);
+
+                /* Update intelpt pointer incase of nops */ 
+                intel_pt_ptr = s->code_ptr;
             }
+
             tcg_out8(s, OPC_JMP_long); /* jmp im */
             s->tb_jmp_insn_offset[a0] = tcg_current_code_size(s);
             tcg_out32(s, 0);
+
+
+            if(
+                pt_trace_version == PT_TRACE_HARDWARE_V1 ||
+                pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+                pt_trace_version == PT_TRACE_HARDWARE_V3 || 
+                pt_trace_version == PT_TRACE_HARDWARE_V4
+            ) {
+                // Todo: rjw24
+
+                // patch the jump location of the stop direct chaining jump 
+                tcg_insn_unit *curr_ptr = s->code_ptr;
+                s->code_ptr = patch_ptr;
+                int32_t val = curr_ptr - patch_ptr;
+                tcg_out32(s, val - 4);
+                s->code_ptr = curr_ptr;
+
+
+                if(pt_trace_version != PT_TRACE_HARDWARE_V1 &&
+                   pt_trace_version != PT_TRACE_HARDWARE_V4) {
+                    // output these two jumps 
+                    fprintf(
+                        pt_asm_log_file, "JMP2: 0x%lX 0x%lX\n", 
+                        (unsigned long)intel_pt_ptr, 
+                        (unsigned long)(s->code_buf + s->tb_jmp_insn_offset[a0] + 4)
+                    );
+
+                    fprintf(
+                        pt_asm_log_file, "JXX2: 0x%lX 0x%lX\n", 
+                        (unsigned long)intel_pt_ptr_jxx, 
+                        (unsigned long)(curr_ptr)
+                    );
+                }
+            }
         } else {
             /* indirect jump method */
             tcg_out_modrm_offset(s, OPC_GRP5, EXT5_JMPN_Ev, -1,
                                  (intptr_t)(s->tb_jmp_target_addr + a0));
+            
+            if(pt_trace_version == PT_TRACE_HARDWARE_V2 || 
+               pt_trace_version == PT_TRACE_HARDWARE_V3) { 
+                // Todo: rjw24
+                fprintf(pt_asm_log_file, 
+                        "JMP3: 0x%lX 0x%lX\n", 
+                        (unsigned long)intel_pt_ptr, (unsigned long)(s->tb_jmp_target_addr + a0)
+                );
+            }
         }
         set_jmp_reset_offset(s, a0);
         break;

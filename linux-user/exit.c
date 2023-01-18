@@ -39,6 +39,7 @@ void preexit_cleanup(CPUArchState *env, int code)
         __gcov_dump();
 #endif
         gdb_exit(code);
-        qemu_plugin_user_exit();
+        // Todo: rjw24
         clean_trace_gen();
+        qemu_plugin_user_exit();
 }
