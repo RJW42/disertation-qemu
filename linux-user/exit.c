@@ -21,6 +21,7 @@
 #include "exec/gdbstub.h"
 #include "qemu.h"
 #include "user-internals.h"
+#include "intel-pt/control.h"
 #ifdef CONFIG_GPROF
 #include <sys/gmon.h>
 #endif
@@ -40,4 +41,5 @@ void preexit_cleanup(CPUArchState *env, int code)
         gdb_exit(code);
         qemu_plugin_user_exit();
         perf_exit();
+        intel_pt_signal_qemu_end();
 }
