@@ -6,6 +6,14 @@
 typedef struct ipt_worker_state {
      u8* buffer;
      u64 pos_in_buffer;
+     u64 buffer_size;
+
+     /* This needs to be stored seperatly from the ip 
+      * as when parsing new tip packets, they use the 
+      * last tip ip as a base, not whatever the true 
+      * ip is (these could differ as a result of following a 
+      * tnt packet for example) */
+     u64 last_tip_value;
 } ipt_worker_state;
 
 
