@@ -13,7 +13,37 @@ static inline void parse_next_packet(
 void parse_section(
     u8* buffer, u64 start, u64 soft_end, u64 hard_end, int out_file
 ) {
+    /* Init State */
+    ipt_worker_state state = {
+        buffer,
+        start,
+        hard_end,
+        0
+    };
 
+    ipt_packet packet = {};
+
+    /* Advance to first PSB packet */
+    while (state.pos_in_buffer < state.buffer_size) {
+        parse_next_packet(&state, &packet);
+
+        if (packet.type != PSB) 
+            continue;
+
+        while (state.pos_in_buffer < state.buffer_size) {
+            parse_next_packet(&state, &packet);
+
+            if (packet.type == PSBEND)
+                break;
+        }
+
+        break;
+    }
+
+    /* Start Parsing */
+    while (state.pos_in_buffer < state.buffer_size) {
+        parse_next_packet(&state, &packet);
+    }
 }
 
 
@@ -24,8 +54,16 @@ void parse_section(
 #define RETURN_IF_PARSED(x) \
     if (glue(parse_, x)(state, packet)) return
 
-#define LEFT(n) \
-    ((state->pos_in_buffer - state->buffer_size) >= n)
+#define LEFT(state, n) \
+    ((state->pos_in_buffer - state->buffer_size) >= (n))
+
+#define GET_BUFFER(state) \
+    (&state->buffer[state->pos_in_buffer])
+
+#define ADVANCE(state, n) \
+    (state->pos_in_buffer += (n))
+
+#define LOWER_BITS(value, n) (value & ((1 << (n)) - 1))
 
 static inline bool parse_tip(ipt_worker_state *state, ipt_packet *packet);
 static inline bool parse_psb(ipt_worker_state *state, ipt_packet *packet);
@@ -51,7 +89,7 @@ static inline bool parse_psb(
 ) {
     static const u8 expected_buffer[] = PSB_PACKET_FULL;
 
-    if (!LEFT(PSB_PACKET_LENGTH))
+    if (!LEFT(state, PSB_PACKET_LENGTH))
         return false;
     
     if (memcmp(
@@ -67,10 +105,10 @@ static inline bool parse_psb(
 static inline bool parse_psbend(
     ipt_worker_state *state, ipt_packet *packet
 ) {
-    if (!LEFT(PSB_END_PACKET_LENGTH))
+    if (!LEFT(state, PSB_END_PACKET_LENGTH))
         return false;
 
-    const u8 *buffer = state->buffer;
+    const u8 *buffer = GET_BUFFER(state);
 
     if (
         buffer[0] != OPPCODE_STARTING_BYTE ||
@@ -78,6 +116,8 @@ static inline bool parse_psbend(
     ) return false;
 
     packet->type = PSBEND;
+
+    ADVANCE(state, PSB_END_PACKET_LENGTH);
 
     return true;
 }
@@ -88,7 +128,7 @@ static inline bool parse_tip_type(
 );
 
 static inline bool ip_out_of_context(
-    const u8 *buffer, ipt_packet *packet
+    ipt_worker_state *state, ipt_packet *packet, u8 ip_bits
 );
 
 static inline bool parse_amount_of_ip_in_tip(
@@ -104,17 +144,17 @@ static inline void parse_ip_from_tip_buffer(
 static inline bool parse_tip(
     ipt_worker_state *state, ipt_packet *packet
 ) {
-    if (!LEFT(TIP_PACKET_LENGTH))
+    if (!LEFT(state, TIP_PACKET_LENGTH))
         return false;
 
-    const u8* buffer = state->buffer;
+    const u8* buffer = GET_BUFFER(state);
 
     if (!parse_tip_type(buffer, packet))
         return false;
 
     u8 ip_bits = buffer[0] >> 5;
 
-    if (ip_out_of_context(packet, ip_bits))
+    if (ip_out_of_context(state, packet, ip_bits))
         return true; /* Not an invalid parsing, hence true */
     
     u8 amount_of_ip_in_tip = 0;
@@ -122,11 +162,15 @@ static inline bool parse_tip(
     if (!parse_amount_of_ip_in_tip(ip_bits, &amount_of_ip_in_tip))
         return false;
 
+    packet->type = TIP;
+
     parse_ip_from_tip_buffer(
         state, buffer, packet, amount_of_ip_in_tip
     );
 
-    return false;
+    ADVANCE(state, amount_of_ip_in_tip + 1);
+
+    return true;
 }
 
 
@@ -150,15 +194,16 @@ static inline bool parse_tip_type(
     case TIP_FUP_OPPCODE:
         packet->tip_data.type = TIP_FUP;
         return true;
-    default
+    default:
         return false;
     }
 }
 
 
 static inline bool ip_out_of_context(
-    ipt_packet *packet, u8 ip_bits
+    ipt_worker_state *state, ipt_packet *packet, u8 ip_bits
 ) {
+    // TODO: not advacing buffer in these functions
     if (ip_bits == 0b000) {
         state->pos_in_buffer++;
         packet->type = TIP_OUT_OF_CONTEXT;
@@ -199,16 +244,16 @@ static inline void parse_ip_from_tip_buffer(
     ipt_worker_state *state, const u8 *buffer, 
     ipt_packet *packet, u8 amount_of_ip_in_tip
 ) {
-    u64 ip_buffer = 0;
     u64 ip = state->last_tip_value;
 
     for(int i = 0; i < 8; ++i) {
         u8 next_byte = 
             (i >= amount_of_ip_in_tip) ? 
-                buffer[8 - i] : (curr_ip >> (7 - i) * 8) & 0xff;
+                buffer[8 - i] : (ip >> (7 - i) * 8) & 0xff;
         
-        ip = (ip << 8) | byte;
-
-        ip_buffer = ()
+        ip = (ip << 8) | next_byte;
     }
+
+    packet->tip_data.ip = ip;
+    state->last_tip_value = ip;
 }

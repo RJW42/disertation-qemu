@@ -2,8 +2,9 @@
 #define INTEL_PT__PARSER_INTERNAL_H
 
 #include "intel-pt/internal-types.h"
+#include "qemu/osdep.h"
 
-void intel_pt_parsing_init(
+bool intel_pt_parsing_init(
     int version, volatile IntelPTDataBuffer* intel_pt_buffer
 );
 

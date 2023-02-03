@@ -14,6 +14,9 @@ typedef struct ipt_worker_state {
       * ip is (these could differ as a result of following a 
       * tnt packet for example) */
      u64 last_tip_value;
+
+     /* */
+     bool in_psb;
 } ipt_worker_state;
 
 
@@ -36,6 +39,7 @@ enum tip_packet_type {
 
 typedef struct ipt_tip_packet {
     enum tip_packet_type type;
+    u64 ip;
 } ipt_tip_packet;
 
 

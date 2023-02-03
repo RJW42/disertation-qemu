@@ -3,7 +3,7 @@
 
 #include "intel-pt/internal-types.h"
 
-void intel_pt_recording_init(
+bool intel_pt_recording_init(
     int version, volatile IntelPTDataBuffer* intel_pt_buffer
 );
 

@@ -77,7 +77,7 @@ void intel_pt_recording_signal_qemu_end(void)
 
 static void *intel_pt_recording_thread_proc(void *arg);
 
-void intel_pt_recording_init(
+bool intel_pt_recording_init(
     int version, volatile IntelPTDataBuffer* intel_pt_buffer
 ) {
     enabled = true;
@@ -92,7 +92,7 @@ void intel_pt_recording_init(
         fprintf(stderr, 
             "Failed to calloc internal intel pt data buffer\n"
         );
-        exit(EXIT_FAILURE);
+        return false;
     }
 
     pthread_create(
@@ -101,6 +101,8 @@ void intel_pt_recording_init(
     );
 
     while(!setup_intel_pt) {}
+
+    return true;
 }
 
 

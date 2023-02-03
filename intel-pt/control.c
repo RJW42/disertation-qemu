@@ -13,7 +13,7 @@
 
 static int version;
 static bool enabled;
-static volatile IntelPTDataBuffer intel_pt_buffer;
+static volatile IntelPTDataBuffer intel_pt_buffer = {};
 
 QemuOptsList intel_pt_opts = {
     .name = "intel-pt",
@@ -34,7 +34,11 @@ bool intel_pt_init(void)
 {
     if (!enabled) return true;
 
-    intel_pt_recording_init(version, &intel_pt_buffer);
+    if (!intel_pt_recording_init(version, &intel_pt_buffer))
+        return false;
+
+    if (!intel_pt_parsing_init(version, &intel_pt_buffer))
+        return false;
 
     return true;
 }
